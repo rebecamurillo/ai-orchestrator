@@ -27,6 +27,7 @@ from orchestrator.domain.statuses import GateEvent
 from orchestrator.domain.values import Worktree
 from tests.unit.fakes.clock import EPOCH, FakeClock
 from tests.unit.fakes.git import FakeGit
+from tests.unit.fakes.step_log import FakeStepLog
 from tests.unit.fakes.workspace import FakeWorkspace
 
 WORK_DIR = "/work"
@@ -104,6 +105,7 @@ def a_context(  # noqa: PLR0913 — one keyword per port or context field, each 
             workspace=lambda _root: made,
             run_env=env if env is not None else an_environment(),
             protected_paths=protected_paths,
+            step_log=FakeStepLog(WORK_DIR),
         ),
     )
 

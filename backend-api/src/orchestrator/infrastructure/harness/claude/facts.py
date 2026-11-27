@@ -82,6 +82,7 @@ class _Reading:
     tools: dict[tuple[str, str], _Tool] = field(default_factory=dict)
     call_owner: dict[str, tuple[str, str]] = field(default_factory=dict)
     events: list[EventFact] = field(default_factory=list)
+    read_paths: set[str] = field(default_factory=set)
 
 
 def _time(value: object) -> datetime | None:
@@ -118,13 +119,38 @@ def _request_classes(usage: Mapping[str, Any]) -> dict[str, int]:
     }
 
 
+def _paths(
+    read: _Reading,
+    owner: tuple[str, str],
+    path: object,
+    at: datetime | None,
+) -> None:
+    conversation, tool = owner
+    stats = read.tools[owner]
+    if not isinstance(path, str):
+        return
+    if tool == "Read":
+        stats.read.add(path)
+        if at is not None and path not in read.read_paths:
+            read.read_paths.add(path)
+            read.events.append(EventFact(at=at, conversation=conversation, kind="read", path=path))
+    if tool in EDIT_TOOLS:
+        stats.edited.add(path)
+        if at is not None:
+            read.events.append(EventFact(at=at, conversation=conversation, kind="write", path=path))
+
+
 class ClaudeLogFacts:
     """The `LogFacts` extractor for harness `claude`."""
 
     name = "claude"
-    version = 1
+    version = 2
     capabilities = LogFactsCapabilities(
-        per_request_usage=True, activity=True, events=True, harness_money_per_model=True
+        per_request_usage=True,
+        activity=True,
+        events=True,
+        harness_money_per_model=True,
+        files_read=True,
     )
 
     def __init__(self, test_run_patterns: tuple[str, ...] = DEFAULT_TEST_RUN_PATTERNS) -> None:
@@ -210,14 +236,7 @@ class ClaudeLogFacts:
             path = tool_input.get("file_path")
             if tool == "NotebookEdit":
                 path = path or tool_input.get("notebook_path")
-            if tool == "Read" and isinstance(path, str):
-                stats.read.add(path)
-            if tool in EDIT_TOOLS and isinstance(path, str):
-                stats.edited.add(path)
-                if at is not None:
-                    read.events.append(
-                        EventFact(at=at, conversation=conversation, kind="write", path=path)
-                    )
+            _paths(read, (conversation, tool), path, at)
             command = tool_input.get("command")
             if tool == "Bash" and self._is_test_run(command):
                 stats.test_runs += 1

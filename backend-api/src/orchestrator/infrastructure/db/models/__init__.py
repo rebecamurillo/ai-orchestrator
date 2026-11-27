@@ -19,6 +19,7 @@ from orchestrator.infrastructure.db.models.facts import (
     UsageFactRow,
 )
 from orchestrator.infrastructure.db.models.harness import HarnessRow
+from orchestrator.infrastructure.db.models.initiative import InitiativeAdvanceRow, InitiativeRow
 from orchestrator.infrastructure.db.models.instance_hold import InstanceHoldRow
 from orchestrator.infrastructure.db.models.metric_results import (
     MetricCalculationRow,
@@ -27,6 +28,7 @@ from orchestrator.infrastructure.db.models.metric_results import (
 )
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.project_channel import ProjectChannelRow
+from orchestrator.infrastructure.db.models.project_package import ProjectPackageRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
 from orchestrator.infrastructure.db.models.run import (
     AttemptRow,
@@ -51,10 +53,13 @@ __all__ = [
     "GateRecordRow",
     "GatewayReadRow",
     "HarnessRow",
+    "InitiativeAdvanceRow",
+    "InitiativeRow",
     "InstanceHoldRow",
     "MetricCalculationRow",
     "MetricValueRow",
     "ProjectChannelRow",
+    "ProjectPackageRow",
     "ProjectRow",
     "RepositoryRow",
     "RequestFactRow",

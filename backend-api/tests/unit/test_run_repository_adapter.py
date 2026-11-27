@@ -354,6 +354,10 @@ NULLABLE = {
         "ended_at",
         # operator revision 2026-09-15: added by story 5-1 (nullable for old runs)
         "partition_branch",
+        # story 1, epic 7 (2026-11-22, AD-36): the three initiative keys, set together
+        "initiative_id",
+        "initiative_round",
+        "initiative_position",
         # Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13
         # amendment, 2026-09-23): the nullable `after_run_id` pointer became the NOT NULL
         # array `after_run_ids` (default '{}'), so it leaves this set. An empty list is
@@ -366,6 +370,11 @@ NULLABLE = {
     },
     "step_run": {"reason", "frame", "story_id"},
     "attempt": {
+        "log_removed_at",  # epic 1 story 3, AD-40, 2026-11-23: set by the retention sweep
+        # epic 8 story 2, AD-37 "The gate's verdict", 2026-11-25: only a spec-gate row sets them
+        "verdict_word",
+        "verdict_fields",
+        "verdict_text",
         "started_at",
         "ended_at",
         "start_sha",
@@ -423,9 +432,19 @@ def test_the_run_table_indexes_the_columns_the_board_and_the_queue_filter_on() -
         "ix_run_status",
         "ix_run_repository_id_status",
         "ix_run_after_run_ids",
+        # story 1, epic 7 (2026-11-22, AD-36): the one partial unique index
+        "uq_run_initiative_key",
     }
     for index in indexes.values():
-        assert index.unique is False, index.name
+        assert index.unique is (index.name == "uq_run_initiative_key"), index.name
+    key = indexes["uq_run_initiative_key"]
+    assert [c.name for c in key.columns] == [
+        "initiative_id",
+        "initiative_round",
+        "initiative_position",
+    ]
+    assert str(key.dialect_options["postgresql"]["where"]) == "initiative_id IS NOT NULL"
+    assert "ck_run_initiative_keys_together" in {c.name for c in RUN_TABLE.constraints}
     assert [c.name for c in indexes["ix_run_repository_id_status"].columns] == [
         "repository_id",
         "status",
@@ -466,7 +485,15 @@ def test_the_gate_record_table_is_indexed_the_way_it_is_read() -> None:
 @pytest.mark.parametrize(
     ("table", "expected"),
     [
-        (RUN_TABLE, {("project_id", "project"), ("repository_id", "repository")}),
+        (
+            RUN_TABLE,
+            {
+                ("project_id", "project"),
+                ("repository_id", "repository"),
+                # story 1, epic 7 (2026-11-22, AD-36): run points at its initiative
+                ("initiative_id", "initiative"),
+            },
+        ),
         (STEP_RUN_TABLE, {("run_id", "run")}),
         (ATTEMPT_TABLE, {("run_id", "run"), ("step_run_id", "step_run")}),
         (GATE_RECORD_TABLE, {("run_id", "run")}),

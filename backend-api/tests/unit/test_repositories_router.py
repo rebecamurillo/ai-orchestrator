@@ -362,8 +362,11 @@ async def test_updating_a_project_still_carries_its_stored_repository(api: Harne
 # ── the published contract ───────────────────────────────────────────────────
 
 
-def test_the_router_declares_four_operations_and_repeats_no_dependency() -> None:
-    """The bearer is attached to the whole `/api/v1` prefix by `main.py` (AD-4)."""
+def test_the_router_declares_five_operations_and_repeats_no_dependency() -> None:
+    """The bearer is attached to the whole `/api/v1` prefix by `main.py` (AD-4).
+
+    Five since story 2 of epic 6, 2026-11-22: `PUT …/initiative-folder` joins.
+    """
     routes = [(sorted(route.methods), route.path) for route in router_module.router.routes]
 
     assert sorted(routes) == [
@@ -371,6 +374,7 @@ def test_the_router_declares_four_operations_and_repeats_no_dependency() -> None
         (["GET"], "/repositories/{repository_id}"),
         (["POST"], "/projects/{project_id}/repositories"),
         (["PUT"], "/repositories/{repository_id}"),
+        (["PUT"], "/repositories/{repository_id}/initiative-folder"),
     ]
     for route in router_module.router.routes:
         assert route.dependencies == []

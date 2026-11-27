@@ -37,6 +37,8 @@ from orchestrator.application.steps import StepPorts
 from orchestrator.application.steps import agent as _agent  # noqa: F401
 from orchestrator.application.steps import bmad_install as _bmad_install  # noqa: F401
 from orchestrator.application.steps import checkpoint as _checkpoint  # noqa: F401
+from orchestrator.application.steps import conversation as _conversation  # noqa: F401
+from orchestrator.application.steps import git_branch_delete as _git_branch_delete  # noqa: F401
 from orchestrator.application.steps import git_commit as _git_commit  # noqa: F401
 from orchestrator.application.steps import git_merge as _git_merge  # noqa: F401
 from orchestrator.application.steps import git_push as _git_push  # noqa: F401
@@ -48,10 +50,12 @@ from orchestrator.application.steps import plan_check as _plan_check  # noqa: F4
 from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
+from orchestrator.application.use_cases.initiative_advance import sweep_advances
 from orchestrator.application.use_cases.instance_hold import release_hold
 from orchestrator.application.use_cases.metric_calculations import sweep_calculations
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
 from orchestrator.application.use_cases.session_turn import TurnPorts
+from orchestrator.application.use_cases.upgrade_reopen import reopen_after_upgrade
 from orchestrator.domain.ports.chat import ChatChannelFactory
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.analysis.scratch_sweep import sweep_analysis_scratch
@@ -72,8 +76,11 @@ from orchestrator.infrastructure.db.writers import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
+from orchestrator.infrastructure.dbos.advance_ports import open_advance_ports
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
+from orchestrator.infrastructure.dbos.initiative_ports import open_initiative_ports
+from orchestrator.infrastructure.dbos.step_close import step_close_ports
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.facts_jobs import facts_jobs
 from orchestrator.infrastructure.gateway import build_gateway
@@ -83,6 +90,7 @@ from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
+from orchestrator.infrastructure.process.step_log import FsStepLog
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.skill_catalog import FsSkillCatalog
 from orchestrator.infrastructure.terminal_jobs import CHAT_SLOT, current_chat, engine_jobs
@@ -168,6 +176,7 @@ def walker_deps(
             harness_env=build_harness_env(settings),
             attempt_writes=partial(open_writer_ports, session_factory),
             logs=RealLogReader(log_secrets(settings)),
+            step_log=FsStepLog(str(settings.work_dir), log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
             facts_writes=partial(
                 open_facts_ports,
@@ -191,6 +200,7 @@ def walker_deps(
         run_finished=partial(
             run_finished_hook, session_factory, git, settings.work_dir, settings.bmad_version
         ),
+        advance_writes=partial(open_advance_ports, session_factory, settings, git, engine_ref),
         calculation_writes=partial(
             open_calculation_ports,
             session_factory,
@@ -293,6 +303,18 @@ def schedule_jobs(settings: Settings) -> None:
             engine.schedule(name, cron, job)
 
 
+def _reopen_upgraded(
+    settings: Settings,
+    session_factory: SessionFactory,
+    git: Git | None,
+    engine: DbosWorkflowEngine,
+) -> None:
+    if git is None:
+        return
+    with open_initiative_ports(session_factory, settings, git, engine) as ports, ports.uow:
+        reopen_after_upgrade(ports)
+
+
 def dependency_startup_sweep(settings: Settings) -> None:
     """Re-enqueue or park dependency-waiting Runs that lost their resolution in a crash.
 
@@ -302,8 +324,9 @@ def dependency_startup_sweep(settings: Settings) -> None:
     runs that were already enqueued are invisible to `list_dependents` (story 5-4, AD-12).
 
     The senior session turns a crash left open are swept next, in the same scope (AD-23).
+    The conversations an upgrade cancelled are reopened last, after the advance sweep.
     """
-    for engine, session_factory, _git in _SERVING:
+    for engine, session_factory, git in _SERVING:
         if session_factory is None:
             continue
         with open_writer_ports(
@@ -313,7 +336,10 @@ def dependency_startup_sweep(settings: Settings) -> None:
             held = engine.held_session_turns()
             deps = engine.walker_deps
             turn_ports = TurnPorts(
-                writers=ports, step=deps.step_ports, read_environment=deps.read_environment
+                writers=ports,
+                step=deps.step_ports,
+                read_environment=deps.read_environment,
+                signal=step_close_ports(ports, engine),
             )
             sweep_session_turns(turn_ports, engine, held)
         if engine.walker_deps.calculation_writes is not None:
@@ -321,6 +347,10 @@ def dependency_startup_sweep(settings: Settings) -> None:
                 sweep_calculations(
                     scope.calculations, scope.uow, scope.clock, engine, engine.held_calculations()
                 )
+        if engine.walker_deps.advance_writes is not None:
+            with engine.walker_deps.advance_writes() as advance_scope:
+                sweep_advances(advance_scope, engine, engine.held_advances())
+            _reopen_upgraded(settings, session_factory, git, engine)
 
 
 def schedule_engine_jobs(settings: Settings) -> None:

@@ -62,6 +62,7 @@ def a_row(repository: Repository) -> RepositoryRow:
         test_globs=list(repository.test_globs),
         package_manager=repository.package_manager,
         clone_check=clone_check_json(repository.clone_check),
+        initiative_folder=repository.initiative_folder,
         created_at=repository.created_at,
         updated_at=repository.updated_at,
     )
@@ -130,6 +131,7 @@ def test_the_table_carries_exactly_the_columns_the_entity_has() -> None:
         "test_globs",
         "package_manager",
         "clone_check",
+        "initiative_folder",
         "created_at",
         "updated_at",
     }
@@ -149,12 +151,18 @@ def test_the_table_carries_exactly_the_columns_the_entity_has() -> None:
         ("test_globs", JSONB),
         ("package_manager", Text),
         ("clone_check", JSONB),
+        ("initiative_folder", Text),
         ("created_at", DateTime),
         ("updated_at", DateTime),
     ],
 )
 def test_each_column_has_the_type_the_migration_creates(column: str, kind: type) -> None:
     assert isinstance(TABLE.columns[column].type, kind)
+
+
+def test_the_initiative_folder_column_defaults_to_initiatives_in_the_database() -> None:
+    # story 2 of epic 6, 2026-11-22: the column is new, existing rows read `initiatives`.
+    assert str(TABLE.columns["initiative_folder"].server_default.arg) == "initiatives"  # type: ignore[union-attr]
 
 
 def test_the_timestamps_carry_their_zone() -> None:
@@ -229,6 +237,7 @@ def test_add_maps_every_field_of_the_entity_onto_a_row() -> None:
     assert row.unit_test_command == "npm test"
     assert row.test_globs == list(SUGGESTED_TEST_GLOBS)
     assert row.package_manager == "npm"
+    assert row.initiative_folder == "initiatives"
     assert row.clone_check == {
         "status": "pending",
         "at": None,
@@ -242,6 +251,19 @@ def test_a_row_maps_back_to_the_entity_it_came_from() -> None:
     repository = a_repository()
 
     assert to_entity(a_row(repository)) == repository
+
+
+def test_the_initiative_folder_maps_both_ways_and_update_writes_it() -> None:
+    # story 2 of epic 6, 2026-11-22.
+    repository = a_repository(initiative_folder="specs/initiatives")
+    row = a_row(repository)
+    session = RecordingSession([row])
+
+    assert to_entity(row).initiative_folder == "specs/initiatives"
+    repository_adapter(session).add(repository)
+    assert session.added[0].initiative_folder == "specs/initiatives"
+    repository_adapter(session).update(repository.model_copy(update={"initiative_folder": "docs"}))
+    assert row.initiative_folder == "docs"
 
 
 def test_get_reads_the_row_by_primary_key() -> None:

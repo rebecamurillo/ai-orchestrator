@@ -135,6 +135,27 @@ async function mockFiles(page: Page, tree: Record<string, unknown>): Promise<voi
       body: JSON.stringify(tree),
     });
   });
+  // epic 2 story 1, EXPERIENCE § 12 delta 5, 2026-11-23: the panel reads files-by-epic, not the tree.
+  // Registered last so it wins over the `files*` glob above.
+  await page.route(`**/api/runs/${RUN_ID}/files-by-epic`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        epics: [
+          {
+            index: 0,
+            title: 'gates',
+            folder: 'specs/gates',
+            files: [SPEC_FILE, OLD_FILE],
+            stories: [
+              { id: '1', title: 'gates', started: true, story_file: null, changed: [SPEC_FILE] },
+            ],
+          },
+        ],
+      }),
+    }),
+  );
 }
 
 async function mockActivity(page: Page): Promise<void> {
@@ -166,29 +187,16 @@ test.describe('changed-since-last-opened marks (8-3)', () => {
     expect(openedRequests.length).toBeGreaterThan(0);
   });
 
-  test('AC2: a file with changed=true shows the accent chip', async ({ page }) => {
+  // epic 2 story 1, EXPERIENCE § 12 delta 5, 2026-11-23: the accent chip of the old tree is
+  // replaced by the story's `changed: {n} files` list.
+  test('AC2: a story with a changed path lists it under changed: 1 files', async ({ page }) => {
     await mockDetail(page, detail());
     await mockFiles(page, changedTree());
     await mockActivity(page);
 
     await page.goto(PAGE_URL);
-    await expect(page.getByTestId('artifacts-tree')).toBeVisible();
-
-    // The changed file's button should carry the chip
-    const changedButton = page.getByTestId(`artifacts-file-${SPEC_FILE}`);
-    await expect(changedButton.locator('.wf-artifacts-chip')).toHaveCount(1);
-  });
-
-  test('AC2: a file with changed=false has no chip', async ({ page }) => {
-    await mockDetail(page, detail());
-    await mockFiles(page, changedTree());
-    await mockActivity(page);
-
-    await page.goto(PAGE_URL);
-    await expect(page.getByTestId('artifacts-tree')).toBeVisible();
-
-    const unchangedButton = page.getByTestId(`artifacts-file-${OLD_FILE}`);
-    await expect(unchangedButton.locator('.wf-artifacts-chip')).toHaveCount(0);
+    await page.getByText('changed: 1 files').click();
+    await expect(page.getByRole('button', { name: SPEC_FILE, exact: true })).toBeVisible();
   });
 
   test('AC3: polling fetch (after first) does not send ?opened=true', async ({ page }) => {

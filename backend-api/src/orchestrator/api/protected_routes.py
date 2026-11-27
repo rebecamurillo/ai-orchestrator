@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, FastAPI
 
+from orchestrator.api import initiative_routes
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE
 from orchestrator.api.routers import (
@@ -16,10 +17,12 @@ from orchestrator.api.routers import (
     metrics_catalogue,
     run_analyses,
     run_analysis,
+    run_files_by_epic,
     run_findings,
     run_gateway_reads,
     run_label,
     run_metrics,
+    run_step_drawer,
 )
 
 API_PREFIX = "/api/v1"
@@ -45,3 +48,10 @@ def install_metrics_routes(app: FastAPI) -> None:
     mount_protected(app, run_analysis.router)
     mount_protected(app, run_findings.router)
     mount_protected(app, run_gateway_reads.router)
+    install_run_page_routes(app)
+    initiative_routes.install_initiative_routes(app)
+
+
+def install_run_page_routes(app: FastAPI) -> None:
+    mount_protected(app, run_step_drawer.router)
+    mount_protected(app, run_files_by_epic.router)

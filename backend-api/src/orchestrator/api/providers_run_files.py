@@ -22,6 +22,7 @@ from orchestrator.application.use_cases.run_files import (
     RunFilesPorts,
     RunFilesWritePorts,
 )
+from orchestrator.application.use_cases.run_files_by_epic import FilesByEpicPorts
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
@@ -31,6 +32,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyUnitOfWork,
 )
 from orchestrator.infrastructure.db.repositories.run_records import SQLAlchemyRunCommitRepository
+from orchestrator.infrastructure.git.git_history import SubprocessGitHistory
 from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
 
@@ -88,4 +90,18 @@ def run_files_diff_ports(
             attempts=SQLAlchemyAttemptRepository(uow.session),
             records=SQLAlchemyGateRecordRepository(uow.session),
             git=required_git(request, "run_files"),
+        )
+
+
+def run_files_by_epic_ports(request: Request) -> Iterator[FilesByEpicPorts]:
+    """The ports `GET /runs/{id}/files-by-epic` reads through (AD-40). Writes nothing."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield FilesByEpicPorts(
+            runs=SQLAlchemyRunRepository(uow.session),
+            steps=SQLAlchemyStepRunRepository(uow.session),
+            attempts=SQLAlchemyAttemptRepository(uow.session),
+            git=required_git(request, "run_files_by_epic"),
+            history=SubprocessGitHistory(),
+            workspace=FsWorkspace,
         )

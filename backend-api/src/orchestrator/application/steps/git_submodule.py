@@ -51,6 +51,7 @@ from orchestrator.application.steps.context import (
     resolved_text,
 )
 from orchestrator.application.steps.registry import register
+from orchestrator.application.steps.step_log import logged
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.values import Park, StepResult
 
@@ -92,20 +93,24 @@ class GitSubmoduleExecutor:
     """Materialise the worktree's submodules, or put one of them on a branch."""
 
     def execute(self, ctx: StepContext) -> StepResult:
-        worktree = require_cwd(ctx)
-        workdir = resolved_text(ctx.with_resolved, WORKDIR_KEY)
-        branch = resolved_text(ctx.with_resolved, BRANCH_KEY)
-        base = resolved_text(ctx.with_resolved, BASE_KEY)
-        declared_update = UPDATE_KEY in ctx.with_resolved
-        if declared_update and (workdir or branch or base):
+        return logged(ctx, lambda inner, _recorder: _submodule(inner))
+
+
+def _submodule(ctx: StepContext) -> StepResult:
+    worktree = require_cwd(ctx)
+    workdir = resolved_text(ctx.with_resolved, WORKDIR_KEY)
+    branch = resolved_text(ctx.with_resolved, BRANCH_KEY)
+    base = resolved_text(ctx.with_resolved, BASE_KEY)
+    declared_update = UPDATE_KEY in ctx.with_resolved
+    if declared_update and (workdir or branch or base):
+        return _park(ctx, AMBIGUOUS_FORM)
+    if workdir and not branch:
+        return _park(ctx, NO_BRANCH)
+    if branch or base:
+        if not workdir:
             return _park(ctx, AMBIGUOUS_FORM)
-        if workdir and not branch:
-            return _park(ctx, NO_BRANCH)
-        if branch or base:
-            if not workdir:
-                return _park(ctx, AMBIGUOUS_FORM)
-            return _checkout(ctx, worktree, workdir, branch, base or None)
-        return _update(ctx, worktree)
+        return _checkout(ctx, worktree, workdir, branch, base or None)
+    return _update(ctx, worktree)
 
 
 def _update(ctx: StepContext, worktree: Path) -> StepResult:

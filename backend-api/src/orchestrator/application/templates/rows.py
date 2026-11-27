@@ -29,7 +29,7 @@ from typing import Any
 
 from orchestrator.application.dto import RunInputs
 from orchestrator.application.graph import UNVALIDATED
-from orchestrator.application.steps import CHECKPOINT_KIND, SHELL_KIND, WHEN_KEY
+from orchestrator.application.steps import CHECKPOINT_KIND, PUSH_RETRY_KEY, SHELL_KIND, WHEN_KEY
 from orchestrator.application.templates import minutes
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
@@ -38,6 +38,7 @@ from orchestrator.application.templates.agent_row import (
 )
 from orchestrator.application.templates.branches import BranchAllocator, frame_branch, fresh_params
 from orchestrator.application.templates.consult import plan_consult
+from orchestrator.application.templates.conversation import conversation_extras
 from orchestrator.application.templates.defaults import with_defaults
 from orchestrator.application.templates.lists import (
     ID_KEY,
@@ -349,12 +350,16 @@ def _resolved(step: Step, frame: Frame) -> dict[str, Any]:
     """
     resolved = {key: resolve(value, frame.scope) for key, value in step.params}
     resolved.update(minutes.step_limits(step, frame.scope))
+    if step.push_retry:
+        resolved[PUSH_RETRY_KEY] = dict(step.push_retry)
     routing = _routing(step, frame)
     if routing is not None:
         resolved[ON_FAIL_KEY] = routing
     if step.agent is not None:
         resolved.update(agent_extras(step.agent, frame))
         resolved[PROMPT_EXTRA_KEY] = prompt_extra(resolved, frame)
+    if step.conversation is not None:
+        resolved.update(conversation_extras(step.conversation, frame))
     return fresh_params(step, frame, resolved)
 
 

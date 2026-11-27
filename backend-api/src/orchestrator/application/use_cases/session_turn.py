@@ -20,7 +20,7 @@ Step status (AD-8, as amended for AD-23).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 from uuid import UUID
@@ -29,6 +29,7 @@ import structlog
 
 from orchestrator.application.rules import budget, session
 from orchestrator.application.rules.signals import row_at
+from orchestrator.application.rules.signals_conversation import CONVERSATION
 from orchestrator.application.steps import agent_tail, agent_workdir, records
 from orchestrator.application.steps.context import (
     RunEnvironment,
@@ -36,11 +37,12 @@ from orchestrator.application.steps.context import (
     committed,
     require_workspace,
 )
-from orchestrator.application.use_cases import session_dispatch
+from orchestrator.application.use_cases import conversation_session, session_close, session_dispatch
 from orchestrator.application.use_cases.instance_hold import hold_active
 from orchestrator.application.use_cases.session_checks import NO_BUDGET
 from orchestrator.application.use_cases.session_dispatch import SESSION_CLOSED, Turn
 from orchestrator.application.use_cases.session_view import SessionTurn, turn_of
+from orchestrator.application.use_cases.signal_apply import SignalPorts
 from orchestrator.application.use_cases.signal_effects import TURN_RUNNING
 from orchestrator.application.use_cases.spend import record_attempt_spend
 from orchestrator.application.use_cases.start_attempt import INTERRUPTED
@@ -48,6 +50,8 @@ from orchestrator.application.use_cases.walk import HELD, Held
 from orchestrator.application.use_cases.walk_context import context
 from orchestrator.application.use_cases.writers import WriterPorts, require_run
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.engine import WorkflowEngine
@@ -82,25 +86,31 @@ class TurnPorts:
     writers: WriterPorts
     step: StepPorts
     read_environment: ReadEnvironment | None = None
+    #: What the turn end sends `step_close` through; `None` where nothing is wired to.
+    signal: SignalPorts | None = None
 
 
 def post_message(ports: MessagePorts, run_id: UUID, text: str) -> SessionTurn:
-    """Queue one turn on the parked row, then enqueue it (AD-23)."""
+    """Queue one turn on the parked row, then enqueue it (AD-23).
+
+    On a `conversation` stop every message is queued, one after another, and a message after
+    the session ended reopens it; the senior session keeps its one open turn."""
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id, lock=True)
-        row = row_at(writers.steps.list_for_run(run_id), run.park_path)
-        if row is None or not session.session_open(run):
-            raise Conflict(NO_SESSION)
-        if not text.strip():
-            raise Invalid(EMPTY_MESSAGE)
+        rows = writers.steps.list_for_run(run_id)
+        row = row_at(rows, run.park_path)
+        reopen = _reopens(run, row)
+        _refuse(run, row, text, reopen)
+        assert row is not None
+        opened: UUID | None = None
+        if reopen:
+            run, opened = _reopen(writers, run, rows, row)
         attempts = writers.attempts.list_for_row(row.id)
         records = writers.records.list_for_run(run_id)
         turns = session.session_attempts(attempts, records)
-        if session.turn_open(turns):
+        if session.turn_open(turns) and run.park_kind != CONVERSATION:
             raise Conflict(TURN_RUNNING)
-        if run.budget_usd is not None and run.budget_usd - budget.figure(run) <= 0:
-            raise Conflict(NO_BUDGET)
         started = session.last_start_payload(records)
         attempt = Attempt(
             id=new_id(),
@@ -117,11 +127,40 @@ def post_message(ports: MessagePorts, run_id: UUID, text: str) -> SessionTurn:
         writers.attempts.add(attempt)
         writers.uow.commit()
     try:
+        if opened is not None:
+            ports.engine.enqueue_session_turn(run_id, opened)
         ports.engine.enqueue_session_turn(run_id, attempt.id)
     except Exception as error:
-        _close(writers, attempt, str(error))
+        close_turn(writers, attempt, str(error))
         raise
     return turn_of(attempt, len(turns) + 1)
+
+
+def _reopens(run: Run, row: StepRun | None) -> bool:
+    """A message on a `conversation` stop whose session was ended opens it again."""
+    return (
+        row is not None
+        and run.park_kind == CONVERSATION
+        and run.status == "needs_you"
+        and not run.senior_session
+    )
+
+
+def _refuse(run: Run, row: StepRun | None, text: str, reopen: bool) -> None:
+    """Every refusal, before the first write."""
+    if row is None or (not session.session_open(run) and not reopen):
+        raise Conflict(NO_SESSION)
+    if not text.strip():
+        raise Invalid(EMPTY_MESSAGE)
+    if run.budget_usd is not None and run.budget_usd - budget.figure(run) <= 0:
+        raise Conflict(NO_BUDGET)
+
+
+def _reopen(
+    writers: WriterPorts, run: Run, rows: Sequence[StepRun], row: StepRun
+) -> tuple[Run, UUID | None]:
+    opened = conversation_session.open_step_session(writers, run, rows, row)
+    return require_run(writers, run.id), opened
 
 
 def read_turn(ports: TurnPorts, attempt_id: UUID) -> Turn | None:
@@ -142,7 +181,7 @@ def read_turn(ports: TurnPorts, attempt_id: UUID) -> Turn | None:
         records = writers.records.list_for_run(run.id)
         turns = session.session_attempts(writers.attempts.list_for_row(row.id), records)
         scope = str(session.last_start_payload(records).get(session.SCOPE_KEY) or "")
-    return Turn(ctx=ctx, run=run, turns=turns, scope=scope)
+    return Turn(ctx=ctx, run=run, turns=turns, scope=scope, rows=tuple(rows))
 
 
 def run_turn(ports: TurnPorts, attempt_id: UUID) -> Held | None:
@@ -179,20 +218,28 @@ def commit_turn(ports: TurnPorts, attempt_id: UUID) -> None:
     if turn is None:
         return
     ctx, attempt = turn.ctx, turn.ctx.attempt
+    # a queued turn a cancel or forced skip closed never ran: the reply file is another
+    # turn's, and there is nothing to commit or bill
+    if attempt.ended_at is not None and not session.dispatched(attempt):
+        return
     fields: dict[str, Any] = {}
     if attempt.status in UNRUN:
         fields = {"status": "error", "output_ref": attempt.output_ref or INTERRUPTED}
-    if session.dispatched(attempt) and turn.run.status not in TERMINAL_RUN:
+    # a turn killed at its start because the session closed under it did no work; its trees
+    # may already be the next row's (a forced skip racing the dispatch)
+    born_closed = attempt.output_ref == SESSION_CLOSED
+    if session.dispatched(attempt) and turn.run.status not in TERMINAL_RUN and not born_closed:
         _guarded(turn, fields, _commit_trees)
     _guarded(turn, fields, lambda done: agent_workdir.end_shas(done.ctx))
     _guarded(turn, fields, _reply)
     finished = attempt.model_copy(update={**fields, "ended_at": ctx.ports.clock.now()})
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
     agent_tail.record_facts(ctx, finished)
-    if ctx.ports.spend_writes is None:
-        return
-    with ctx.ports.spend_writes() as spend_ports:
-        record_attempt_spend(spend_ports, turn.run, finished, None, locked=True)
+    if ctx.ports.spend_writes is not None:
+        with ctx.ports.spend_writes() as spend_ports:
+            record_attempt_spend(spend_ports, turn.run, finished, None, locked=True)
+    if turn.run.park_kind == CONVERSATION or session.merge_session(turn.run):
+        session_close.after_turn(ports, attempt_id)
 
 
 def _guarded(turn: Turn, fields: dict[str, Any], part: Callable[[Turn], dict[str, Any]]) -> None:
@@ -209,7 +256,7 @@ def _commit_trees(turn: Turn) -> dict[str, Any]:
     """Each tree's `session: turn {k}` commit; git's refusal makes the turn `error`."""
     message = session.TURN_MESSAGE.format(k=session.turn_number(turn.turns, turn.ctx.attempt))
     try:
-        made = agent_workdir.sweep(turn.ctx, message)
+        made = session_dispatch.session_sweep(turn.ctx, message)
     except GitError as error:
         return {"status": "error", "output_ref": session_dispatch.git_words(error)}
     records.note_commits(turn.ctx, made, "session")
@@ -223,7 +270,7 @@ def _reply(turn: Turn) -> dict[str, Any]:
     return {"reply": session.capped(text)}
 
 
-def _close(writers: WriterPorts, attempt: Attempt, reason: str) -> None:
+def close_turn(writers: WriterPorts, attempt: Attempt, reason: str) -> None:
     with writers.uow:
         closed = attempt.model_copy(
             update={"status": "error", "output_ref": reason, "ended_at": writers.clock.now()}

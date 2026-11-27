@@ -56,13 +56,24 @@ SPINE = {
     # submodule's own repository instead of the worktree root (hub-Run initiative H2, spine
     # "Template DSL v1 keys" AD-9/AD-14 amendment, 2026-09-23).
     "git.commit": ("deterministic", 5, frozenset({"message", "workdir"}), False),
-    "git.push": ("deterministic", 5, frozenset({"branch", "workdir"}), False),
+    # Revised: `git.push` gained `allow_default_branch` (epic 8 story 3,
+    # orchestrator-initiative-steps, 2026-11-25).
+    "git.push": (
+        "deterministic",
+        5,
+        frozenset({"branch", "workdir", "allow_default_branch"}),
+        False,
+    ),
+    # Added: `git.branch_delete` (epic 3 story 4, orchestrator-initiative-steps, 2026-11-22).
+    "git.branch_delete": ("deterministic", 5, frozenset({"branch"}), False),
     "pr.link": ("liveness", 5, frozenset({"branch"}), False),
     # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
     # value plans the row `skipped · no checkpoint`, the same plan-time rule the
     # empty-command shell skip already used (multi-repo initiative S5, spine AD-7
     # amendment, 2026-09-23).
     "checkpoint": ("human", None, frozenset({"when"}), False),
+    # Added: `conversation` (epic 4 story 3, orchestrator-initiative-steps, 2026-11-22).
+    "conversation": ("human", None, frozenset({"skill", "persona", "step"}), False),
     "template": (None, None, frozenset({"name", "version", "inputs"}), False),
     "bmad.install": ("deterministic", 30, frozenset(), False),
     # Revised: `metrics.analyse` — no gate default, so an ungated row stays `unvalidated`
@@ -70,15 +81,17 @@ SPINE = {
     "metrics.analyse": (None, None, frozenset(), False),
 }
 
-#: Revised from twelve by the `git.submodule` row above, which was itself revised from
+#: Revised to sixteen by `conversation` (epic 4 story 3, 2026-11-22), from fifteen by
+#: `git.branch_delete` (epic 3 story 4, 2026-11-22), from fourteen below;
+#: revised from twelve by the `git.submodule` row above, which was itself revised from
 #: eleven by `git.merge` (hub-Run initiative H1, 2026-09-23), then to fourteen by
 #: `metrics.analyse` (epic 5 story 4, 2026-11-13).
-FOURTEEN = 14
+SIXTEEN = 16
 
 
-def test_the_registry_holds_exactly_the_fourteen_shipped_kinds() -> None:
+def test_the_registry_holds_exactly_the_sixteen_shipped_kinds() -> None:
     assert set(KIND_META) == set(SPINE)
-    assert len(KIND_META) == FOURTEEN
+    assert len(KIND_META) == SIXTEEN
 
 
 @pytest.mark.parametrize("kind", sorted(SPINE))

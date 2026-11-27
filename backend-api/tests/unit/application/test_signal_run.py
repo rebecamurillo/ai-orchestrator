@@ -632,4 +632,9 @@ def test_the_engine_is_handed_the_operators_own_signal_for_this_run() -> None:
 
     signal_run(world.signal_ports, world.run.id, signal)
 
-    assert world.engine.calls == [("signal", (world.run.id, signal))]
+    # story 2 (epic 4 conversation stop), 2026-11-22: the engine is
+    # handed the stop the signal was validated against
+    stop = world.run.park_seq
+    assert world.engine.calls == [
+        ("signal", (world.run.id, signal.model_copy(update={"stop": stop})))
+    ]

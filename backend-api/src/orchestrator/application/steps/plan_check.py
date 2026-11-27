@@ -27,6 +27,7 @@ from pathlib import Path
 
 from orchestrator.application.steps.context import StepContext
 from orchestrator.application.steps.registry import register
+from orchestrator.application.steps.step_log import logged
 from orchestrator.domain.values import Park, StepResult
 
 #: The kind this module implements (AD-9: named here, beside the executor, or nowhere).
@@ -55,6 +56,9 @@ class PlanCheckExecutor:
     """Re-read every list file the plan recorded, at its branch's current head."""
 
     def execute(self, ctx: StepContext) -> StepResult:
+        return logged(ctx, lambda inner, _recorder: self._check(inner))
+
+    def _check(self, ctx: StepContext) -> StepResult:
         if ctx.resume_signal is not None and ctx.resume_signal.event == CONTINUE:
             return StepResult(status="done", gate=ctx.row.gate)
         stale = self._first_stale_path(ctx)

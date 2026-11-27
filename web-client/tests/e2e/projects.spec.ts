@@ -67,6 +67,15 @@ test.describe('bare /projects', () => {
 });
 
 test.describe('?id=<MIXED>', () => {
+  test('shows the INITIATIVES section without a Project column', async ({ page }) => {
+    await page.goto(`/projects?id=${MIXED_ID}`);
+
+    const detail = page.getByTestId('projects-detail');
+    await expect(detail).toContainText('INITIATIVES');
+    await expect(detail.getByTestId('initiatives-list')).toBeVisible();
+    await expect(detail.getByTestId('initiatives-list')).not.toContainText('Project');
+  });
+
   test('renders the detail pane in order, below the list pane', async ({ page }) => {
     await page.goto(`/projects?id=${MIXED_ID}`);
 
@@ -196,11 +205,48 @@ test.describe('?id=<CLEAN>', () => {
 
     await expect(page.getByTestId('projects-detail')).toBeVisible();
     const painted = await paintedColours(page);
-    const signals = painted.filter(
-      (entry) => entry.value.includes(AMBER) || entry.value.includes(RED),
-    );
+    // Story 10.5, 2026-11-22 (EXPERIENCE § 10): the destructive *Remove package* button is
+    // painted in the failed signal (border and label, `Button.astro`); every other entry stays.
+    const removeButton = 'button[data-testid=projects-package-remove]';
+    await expect(page.getByTestId('projects-package-remove')).toBeVisible();
+    const signals = painted
+      .filter((entry) => entry.value.includes(AMBER) || entry.value.includes(RED))
+      .filter(
+        (entry) =>
+          !(
+            [removeButton, `${removeButton}::before`, `${removeButton}::after`].includes(
+              entry.selector,
+            ) &&
+            (entry.property === 'color' || /^border-.*-color$/.test(entry.property))
+          ),
+      );
 
     expect(signals, JSON.stringify(signals)).toEqual([]);
+  });
+});
+
+test.describe('?id=<MIXED> package', () => {
+  test('shows the package and prints a refused remove verbatim', async ({ page }) => {
+    await page.goto(`/projects?id=${MIXED_ID}`);
+
+    const section = page.getByTestId('projects-package');
+    await expect(section).toContainText('workflows');
+    await expect(section).toContainText('spec interactive ▸ build auto');
+    await expect(section).toContainText('Initiatives already started keep their sequence');
+
+    await page.getByTestId('projects-package-remove').click();
+    await expect(page.getByTestId('projects-package-remove-refusal')).toContainText(
+      'refused: 2 open initiatives use this package — familio-dessin-v2, familio-chores-v3',
+    );
+  });
+
+  test('saves an initiative folder', async ({ page }) => {
+    await page.goto(`/projects?id=${MIXED_ID}`);
+
+    const input = page.getByTestId('projects-folder-orchestrator-api');
+    await input.fill('specs');
+    await page.getByTestId('projects-folder-orchestrator-api-save').click();
+    await expect(page.getByTestId('projects-folder-orchestrator-api')).toHaveValue('specs');
   });
 });
 

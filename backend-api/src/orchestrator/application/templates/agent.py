@@ -68,7 +68,7 @@ def check_agent_extras(node: LinedMap) -> list[ValidationError]:
         errors += unknown_keys(sub, allowed)
     errors += _check_status_tokens(node)
     errors += _check_expect_files(node)
-    errors += _check_route_lists(node)
+    errors += check_route_lists(node)
     errors += _check_writes(node)
     errors += _check_prompt_clauses(node)
     errors += _check_required_prompts(node)
@@ -109,7 +109,7 @@ def _check_writes(node: LinedMap) -> list[ValidationError]:
     return [problem(line, INVALID_VALUE) for path in paths if not isinstance(path, str)]
 
 
-def _check_route_lists(node: LinedMap) -> list[ValidationError]:
+def check_route_lists(node: LinedMap) -> list[ValidationError]:
     """Entries are non-empty text, and no status token routes two ways at once."""
     expect = as_map(node.get(EXPECT_KEY))
     if expect is None:

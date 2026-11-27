@@ -91,6 +91,7 @@ def test_launching_configures_starts_and_then_declares_the_queue() -> None:
         "start",
         "register_queue",
         "register_queue",
+        "register_queue",  # epic 3 story 2, 2026-11-22: three queues (AD-6/AD-12 amended)
     ]
     names = [name for name, _ in fake.calls]
     assert max(i for i, name in enumerate(names) if name in ("step", "workflow")) < names.index(
@@ -113,7 +114,9 @@ def test_enqueue_starts_the_walk_under_the_run_id_behind_its_repository() -> Non
     fake = FakeDurableEngine()
     engine = a_launched_engine(fake)
 
-    reference = engine.enqueue(RUN_A, REPOSITORY)
+    reference = engine.enqueue(
+        RUN_A, REPOSITORY, "walk"
+    )  # epic 3 story 2, 2026-11-22: enqueue takes the lane (AD-6/AD-12 amended)
 
     assert fake.enqueued == [(QUEUE_NAME, str(RUN_A), str(REPOSITORY))]
     assert reference == {"workflow_id": str(RUN_A)}
@@ -123,7 +126,9 @@ def test_enqueue_before_the_engine_is_launched_is_a_bug_and_says_so() -> None:
     engine = an_engine(FakeDurableEngine())
 
     with pytest.raises(RuntimeError, match=NOT_LAUNCHED):
-        engine.enqueue(RUN_A, REPOSITORY)
+        engine.enqueue(
+            RUN_A, REPOSITORY, "walk"
+        )  # epic 3 story 2, 2026-11-22: enqueue takes the lane (AD-6/AD-12 amended)
 
 
 def test_a_signal_is_sent_to_the_runs_own_topic() -> None:
@@ -135,7 +140,24 @@ def test_a_signal_is_sent_to_the_runs_own_topic() -> None:
     workflow_id, message, topic = fake.sent[0]
     assert workflow_id == str(RUN_A)
     assert topic == HUMAN_TOPIC.format(run_id=RUN_A)
-    assert message == {"kind": "continue", "payload": {"accepted": ["a.py"]}}
+    # story 2 (epic 4 conversation stop), 2026-11-22: the message keeps its stop
+    assert message == {"kind": "continue", "payload": {"accepted": ["a.py"]}, "stop": None}
+
+
+def test_a_signal_carries_the_stop_it_was_validated_against() -> None:
+    fake = FakeDurableEngine()
+    engine = a_launched_engine(fake)
+
+    engine.signal(RUN_A, Signal(kind="continue", payload={"a": 1}, stop=4))
+
+    assert fake.sent[0][1] == {"kind": "continue", "payload": {"a": 1}, "stop": 4}
+
+
+def test_a_cancel_still_sends_no_stop() -> None:
+    fake = FakeDurableEngine()
+    a_launched_engine(fake).cancel(RUN_A)
+
+    assert fake.sent[0][1] == {"kind": "cancel"}
 
 
 def test_cancel_stops_the_workflow_of_that_run() -> None:
@@ -170,10 +192,12 @@ def test_cancel_marks_the_workflow_before_it_ends_the_wait() -> None:
 def test_the_queue_is_reported_oldest_first_with_positions_among_the_waiting() -> None:
     """A Run the engine is already running has no position: a position is a queue's idea."""
     fake = FakeDurableEngine(
-        queued=[
-            a_queued_workflow(str(RUN_B), ENQUEUED, LATER),
-            a_queued_workflow(str(RUN_A), PENDING, EARLIER),
-        ]
+        queued={
+            QUEUE_NAME: [
+                a_queued_workflow(str(RUN_B), ENQUEUED, LATER),
+                a_queued_workflow(str(RUN_A), PENDING, EARLIER),
+            ]
+        }
     )
 
     entries = a_launched_engine(fake).list_queue()
@@ -185,7 +209,9 @@ def test_the_queue_is_reported_oldest_first_with_positions_among_the_waiting() -
 
 
 def test_a_state_the_port_does_not_name_is_reported_as_pending() -> None:
-    fake = FakeDurableEngine(queued=[a_queued_workflow(str(RUN_A), "DELAYED", EARLIER)])
+    fake = FakeDurableEngine(
+        queued={QUEUE_NAME: [a_queued_workflow(str(RUN_A), "DELAYED", EARLIER)]}
+    )
 
     assert a_launched_engine(fake).list_queue()[0].engine_state == "pending"
 

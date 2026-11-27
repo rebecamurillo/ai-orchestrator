@@ -70,3 +70,36 @@ export const init = defineAction({
     return data;
   },
 });
+
+/** The per-row *save* of the `initiative folder` column. */
+export const initiativeFolder = defineAction({
+  accept: 'form',
+  handler: async (form: FormData) => {
+    const repositoryId = form.get('repositoryId');
+    const folder = form.get('initiativeFolder');
+    if (typeof repositoryId !== 'string' || repositoryId.length === 0) {
+      throw new ActionError({ code: 'BAD_REQUEST', message: 'repositoryId is required' });
+    }
+    if (typeof folder !== 'string' || folder.length === 0) {
+      throw new ActionError({ code: 'BAD_REQUEST', message: 'initiativeFolder is required' });
+    }
+
+    const { data, error } = await backend().PUT(
+      '/api/v1/repositories/{repository_id}/initiative-folder',
+      {
+        params: { path: { repository_id: repositoryId } },
+        body: { initiative_folder: folder },
+      },
+    );
+    if (error) {
+      const code =
+        error.status === 404
+          ? 'NOT_FOUND'
+          : error.status === 422
+            ? 'BAD_REQUEST'
+            : 'INTERNAL_SERVER_ERROR';
+      throw new ActionError({ code, message: error.detail ?? 'initiative folder not saved' });
+    }
+    return data;
+  },
+});

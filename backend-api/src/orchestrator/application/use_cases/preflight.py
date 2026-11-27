@@ -10,8 +10,10 @@ so the New-workflow screen can call this on every keystroke.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from orchestrator.application.dto import ProjectSnapshot, RepositorySnapshot, RunInputs
 from orchestrator.application.preflight import checks, lists
@@ -22,6 +24,10 @@ from orchestrator.application.preflight.model import (
     Line,
     PreflightRequest,
     PreflightResult,
+)
+from orchestrator.application.rules.initiative_folder import (
+    INITIATIVE_FOLDER_INPUT,
+    bind_initiative_folder,
 )
 from orchestrator.application.setup_summary import bmad_choice
 from orchestrator.application.templates.plan import plan_run
@@ -105,13 +111,18 @@ class Preflighted:
     plan: Plan | None
     plan_error: PlanError | None
     result: PreflightResult
+    #: The inputs the plan was built with: the request's, `initiative_folder` bound (SPEC CAP-4).
+    inputs: dict[str, Any] = field(default_factory=dict)
 
 
 def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Preflighted:
     """Resolve, plan, and answer every FR-8 line — the one pass `run_preflight` below is a
     thin projection of, and the one `create_run` (4.4) persists from."""
     resolved = _resolve(ports, req)
-    plan, plan_error = _build_plan(ports, req, resolved)
+    req, bind_error = _bind(req, resolved)
+    plan, plan_error = (
+        (None, bind_error) if bind_error is not None else _build_plan(ports, req, resolved)
+    )
     ctx = Context(
         git=ports.git,
         base_dir=resolved.base_dir,
@@ -149,7 +160,13 @@ def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Prefligh
         plan_error=plan_error,
         conflict_consent_required=conflict_consent_required,
     )
-    return Preflighted(resolved=resolved, plan=plan, plan_error=plan_error, result=result)
+    return Preflighted(
+        resolved=resolved,
+        plan=plan,
+        plan_error=plan_error,
+        result=result,
+        inputs=dict(req.inputs),
+    )
 
 
 def run_preflight(ports: PreflightPorts, req: PreflightRequest) -> PreflightResult:
@@ -164,6 +181,20 @@ def _resolve(ports: PreflightPorts, req: PreflightRequest) -> _Resolved:
     base_dir = _base_dir(ports.work_dir, project, repository)
     tree, tree_error = _resolve_tree(ports.templates, req.template_name, req.template_version)
     return _Resolved(project, repository, base_dir, tree, tree_error)
+
+
+def _bind(req: PreflightRequest, resolved: _Resolved) -> tuple[PreflightRequest, PlanError | None]:
+    """`req` with `initiative_folder` bound to the Repository's folder, or the refusal."""
+    if resolved.repository is None or resolved.tree is None:
+        return req, None
+    declared = any(decl.name == INITIATIVE_FOLDER_INPUT for decl in resolved.tree.root.inputs)
+    try:
+        bound = bind_initiative_folder(
+            declared=declared, folder=resolved.repository.initiative_folder, inputs=req.inputs
+        )
+    except PlanError as error:
+        return req, error
+    return dataclasses.replace(req, inputs=bound), None
 
 
 def _lines(ctx: Context) -> list[Line]:

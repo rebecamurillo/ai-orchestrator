@@ -1,0 +1,56 @@
+---
+/**
+ * New initiative (story 10.3): a page, not a modal. One SSR read, `GET /projects`, feeds the
+ * project select; a `?project=` the list does not carry (the list is paginated) is resolved
+ * through `GET /projects/{id}` and prepended, as `workflows/new.astro` does. The island reads
+ * the package itself.
+ */
+import type { components } from '../../api/schema';
+import Shell from '../../layouts/Shell.astro';
+import NewInitiative from '../../islands/NewInitiative';
+import { backend } from '../../api/server';
+
+export const prerender = false;
+
+type ProjectRead = components['schemas']['ProjectRead'];
+
+const projectParam = Astro.url.searchParams.get('project');
+
+let projects: ProjectRead[] = [];
+try {
+  const { data, error } = await backend().GET('/api/v1/projects');
+  if (!error) projects = data?.items ?? [];
+} catch {
+  projects = [];
+}
+
+if (projectParam && !projects.some((p) => p.id === projectParam)) {
+  try {
+    const { data, error } = await backend().GET('/api/v1/projects/{project_id}', {
+      params: { path: { project_id: projectParam } },
+    });
+    if (!error && data) projects = [data, ...projects];
+  } catch {
+    // an unknown project falls back to the first one listed
+  }
+}
+
+const initialProjectId =
+  projectParam && projects.some((p) => p.id === projectParam)
+    ? projectParam
+    : (projects[0]?.id ?? null);
+---
+
+<Shell active="initiatives" title="NEW INITIATIVE">
+  <p class="ini-crumb"><a href="/initiatives">initiatives</a> / new</p>
+  <h1 class="newini-title">New initiative</h1>
+  <p class="newini-intro">
+    The first workflow starts on create, with the first message as turn 1 of its first step. The
+    workflows are the project's package, fixed for this initiative at creation.
+  </p>
+  <NewInitiative
+    client:load
+    projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+    initialProjectId={initialProjectId}
+  />
+</Shell>

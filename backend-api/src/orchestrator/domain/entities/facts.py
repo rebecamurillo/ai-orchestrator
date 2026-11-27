@@ -29,7 +29,7 @@ UsageClass = Literal[
     "gateway_completion",
 ]
 GatewayTrigger = Literal["attempt_end", "run_end", "recalculation"]
-EventKind = Literal["write", "test_run"]
+EventKind = Literal["write", "test_run", "read"]
 
 
 class FactSet(BaseModel):

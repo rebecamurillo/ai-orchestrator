@@ -99,21 +99,19 @@ describe('StoryCard', () => {
 });
 
 describe('AgentCard', () => {
-  it('carries the Open step CTA, and the CTA alone navigates', () => {
+  it('carries the Open step CTA as a button that opens the drawer, not a link (epic 2 story 2, EXPERIENCE § 12 delta 4, 2026-11-23)', () => {
     const html = renderToStaticMarkup(
-      createElement(AgentCard, { node: node('epics[1].stories[0].build'), runId: 'r1' }),
+      createElement(AgentCard, {
+        node: { ...node('epics[1].stories[0].build'), seq: 13, attemptN: 2 },
+        runId: 'r1',
+      }),
     );
 
     expect(html).toContain('data-testid="wf-diagram-open-epics.1.stories.0.build"');
-    expect(html).toMatch(/class="wf-node-cta nodrag"/);
+    expect(html).toMatch(/<button type="button" class="wf-node-cta nodrag"/);
     expect(html).toContain('Open step');
-    // a real link, so middle-click, cmd-click and copy-link-address all work; `nodrag`
-    // is what keeps a click on it a click rather than the start of a drag. The card body
-    // is still a drag handle: the title and meta carry no href of their own.
-    expect(html).toMatch(
-      /<a class="wf-node-cta nodrag"[^>]*href="\/workflows\/r1\/steps\/epics\.1\.stories\.0\.build"/,
-    );
-    expect([...html.matchAll(/<a /g)]).toHaveLength(1);
+    // `nodrag` keeps a click on it a click; the card body is still a drag handle
+    expect(html).not.toContain('<a ');
     expect(html).not.toMatch(/<p class="wf-node-title"[^>]*href/);
   });
 
@@ -151,6 +149,11 @@ describe('GuardrailStrip', () => {
           ownerPath: 'epics.0',
           overflow: 4,
           muted: false,
+          // epic 2 story 3, EXPERIENCE § 12 delta 3, 2026-11-23: new required fields, strip stays unsplit
+          before: [],
+          after: [],
+          agent: null,
+          afterLabel: 'AFTER' as const,
           entries: ['branch', 'setup', 'baseline', 'commit-e2e'].map((label) => ({
             stepId: label,
             path: `epics[0].${label}`,
@@ -159,6 +162,8 @@ describe('GuardrailStrip', () => {
             token: 'DON',
             word: 'done',
             stop: false,
+            seq: 0,
+            n: 0,
           })),
         },
       }),
@@ -248,6 +253,11 @@ describe('the guardrail strip speaks as well as it draws', () => {
       ownerPath: 'epics.0',
       overflow,
       muted: false,
+      // epic 2 story 3, EXPERIENCE § 12 delta 3, 2026-11-23: new required fields, strip stays unsplit
+      before: [],
+      after: [],
+      agent: null,
+      afterLabel: 'AFTER' as const,
       entries: [
         {
           stepId: 'sync',
@@ -257,6 +267,8 @@ describe('the guardrail strip speaks as well as it draws', () => {
           token: 'DON',
           word: 'done',
           stop: false,
+          seq: 0,
+          n: 0,
         },
         {
           stepId: 'verify',
@@ -266,6 +278,8 @@ describe('the guardrail strip speaks as well as it draws', () => {
           token: 'QUE',
           word: 'queued',
           stop: false,
+          seq: 0,
+          n: 0,
         },
       ],
     };
@@ -342,5 +356,26 @@ describe('a card is the focusable thing', () => {
 
     expect(html).toContain(`title="${long}"`);
     expect(html).toContain('class="wf-node-title"');
+  });
+});
+
+describe('the Files button (epic 2 story 1)', () => {
+  it('is on epic and story cards with nodrag, and not on root or agent cards', () => {
+    const epic = renderToStaticMarkup(
+      createElement(EpicCard, { node: node('epics[1]'), onToggle: noop }),
+    );
+    const story = renderToStaticMarkup(
+      createElement(StoryCard, { node: node('epics[1].stories[0]'), onToggle: noop }),
+    );
+    expect(epic).toMatch(
+      /class="wf-node-files nodrag"[^>]*data-testid="wf-diagram-files-epics\.1"/,
+    );
+    expect(story).toContain('data-testid="wf-diagram-files-epics.1.stories.0"');
+    const root = renderToStaticMarkup(createElement(RootCard, { node: node('root') }));
+    const agent = renderToStaticMarkup(
+      createElement(AgentCard, { node: node('epics[1].stories[0].build'), runId: 'r1' }),
+    );
+    expect(root).not.toContain('wf-diagram-files-');
+    expect(agent).not.toContain('wf-diagram-files-');
   });
 });

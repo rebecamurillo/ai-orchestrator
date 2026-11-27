@@ -21,10 +21,11 @@ Flushing is not committing — the transaction stays the unit of work's.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from orchestrator.domain.entities.attempt import AGENT_ROLE, Attempt
 from orchestrator.domain.statuses import AttemptRole
@@ -65,6 +66,9 @@ FINISHED_COLUMNS = (
     "cost_usd",
     "cost_provisional",
     "reply",
+    "verdict_word",
+    "verdict_fields",
+    "verdict_text",
 )
 
 
@@ -87,6 +91,7 @@ def to_entity(row: AttemptRow) -> Attempt:
         root_end_sha=row.root_end_sha,
         frozen_test_files=(None if row.frozen_test_files is None else tuple(row.frozen_test_files)),
         log_path=row.log_path,
+        log_removed_at=row.log_removed_at,
         exit_code=row.exit_code,
         output_ref=row.output_ref,
         harness=row.harness,
@@ -100,6 +105,9 @@ def to_entity(row: AttemptRow) -> Attempt:
         # an unflushed row has no server default yet, and every stored row reads `''`
         message=row.message or "",
         reply=row.reply or "",
+        verdict_word=row.verdict_word,
+        verdict_fields=None if row.verdict_fields is None else dict(row.verdict_fields),
+        verdict_text=row.verdict_text,
     )
 
 
@@ -123,6 +131,7 @@ def row_values(attempt: Attempt) -> dict[str, Any]:
             None if attempt.frozen_test_files is None else list(attempt.frozen_test_files)
         ),
         "log_path": attempt.log_path,
+        "log_removed_at": attempt.log_removed_at,
         "exit_code": attempt.exit_code,
         "output_ref": attempt.output_ref,
         "harness": attempt.harness,
@@ -135,6 +144,11 @@ def row_values(attempt: Attempt) -> dict[str, Any]:
         "cost_provisional": attempt.cost_provisional,
         "message": attempt.message,
         "reply": attempt.reply,
+        "verdict_word": attempt.verdict_word,
+        "verdict_fields": (
+            None if attempt.verdict_fields is None else dict(attempt.verdict_fields)
+        ),
+        "verdict_text": attempt.verdict_text,
     }
 
 
@@ -182,6 +196,13 @@ class SQLAlchemyAttemptRepository:
             select(AttemptRow).where(AttemptRow.step_run_id == step_run_id).order_by(AttemptRow.n)
         ).all()
         return [to_entity(row) for row in rows]
+
+    def mark_logs_removed(self, run_id: UUID, at: datetime) -> None:
+        self._session.execute(
+            update(AttemptRow)
+            .where(AttemptRow.run_id == run_id, AttemptRow.log_removed_at.is_(None))
+            .values(log_removed_at=at)
+        )
 
     def mark_started(self, attempt: Attempt) -> None:
         """Write `status`, `started_at`, `engine_ref`, `start_sha`, `root_start_sha`,

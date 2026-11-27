@@ -89,13 +89,17 @@ KIND_META: dict[str, KindMeta] = {
     # submodule's own repository instead of the worktree root (hub-Run initiative H2, spine
     # "Template DSL v1 keys" AD-9/AD-14 amendment, 2026-09-23).
     "git.commit": KindMeta("deterministic", 5, frozenset({"message", "workdir"})),
-    "git.push": KindMeta("deterministic", 5, frozenset({"branch", "workdir"})),
+    "git.push": KindMeta(
+        "deterministic", 5, frozenset({"branch", "workdir", "allow_default_branch"})
+    ),
+    "git.branch_delete": KindMeta("deterministic", 5, frozenset({"branch"})),
     "pr.link": KindMeta("liveness", 5, frozenset({"branch"})),
     # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
     # value plans the row `skipped · no checkpoint` at plan time, the same rule the
     # empty-command shell skip already used (multi-repo initiative S5, spine AD-7
     # amendment, 2026-09-23).
     "checkpoint": KindMeta("human", None, frozenset({"when"})),
+    "conversation": KindMeta("human", None, frozenset({"skill", "persona", "step"})),
     "template": KindMeta(None, None, frozenset({"name", "version", "inputs"})),
     "bmad.install": KindMeta("deterministic", 30, frozenset()),
     # No gate default: a `metrics.analyse` row without a `gate` stays `unvalidated` (epic 5
@@ -118,6 +122,10 @@ AGENT_KIND = "agent"
 #: marks its node `human` by kind rather than by gate, and AD-9 says a kind is named here
 #: or nowhere.
 CHECKPOINT_KIND = "checkpoint"
+
+#: The kind whose step is a conversation with the agent a package names; a Run holding one
+#: from an `interactive` template walks in the interactive lane.
+CONVERSATION_KIND = "conversation"
 
 #: The kind whose step runs a command. Named here because the planner skips a row of this
 #: kind whose command resolved to nothing, and that test is a test about the kind.
@@ -190,6 +198,16 @@ COMMIT_MESSAGE_KEY = "message"
 #: The two kinds that end an epic on the remote. `skip_epic` marks them `skipped` when the
 #: push itself is the stop (AD-13), so they are named here rather than spelled in the rule.
 PUSH_KIND = "git.push"
+
+#: The kind that merges a branch into the one the Run stands on; named here so rules and
+#: session use cases can ask for it without importing the executor module.
+MERGE_KIND = "git.merge"
+PUSH_ALLOW_DEFAULT_KEY = "allow_default_branch"
+PUSH_RETRY_KEY = "retry"
+PUSH_RETRY_KEYS = frozenset({"max", "sync_first"})
+
+#: The kind that deletes the merged spec branch on the remote.
+BRANCH_DELETE_KIND = "git.branch_delete"
 LINK_KIND = "pr.link"
 
 # Every `steps/<kind>.py` module reads `KIND_META` and friends back from *this* package, so
@@ -207,15 +225,21 @@ __all__ = [
     "AGENT_KIND",
     "ANALYSE_KIND",
     "ATTACH_MODE",
+    "BRANCH_DELETE_KIND",
     "CHECKPOINT_KIND",
     "COMMIT_KIND",
     "COMMIT_MESSAGE_KEY",
+    "CONVERSATION_KIND",
     "EXECUTORS",
     "GATES",
     "KIND_META",
     "LINK_KIND",
+    "MERGE_KIND",
     "PLAN_KIND",
+    "PUSH_ALLOW_DEFAULT_KEY",
     "PUSH_KIND",
+    "PUSH_RETRY_KEY",
+    "PUSH_RETRY_KEYS",
     "SHELL_KIND",
     "SUBMODULE_BASE_KEY",
     "SUBMODULE_BRANCH_KEY",

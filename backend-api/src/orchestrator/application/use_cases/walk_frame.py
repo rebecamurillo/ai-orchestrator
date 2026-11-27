@@ -25,7 +25,7 @@ from uuid import UUID
 
 from orchestrator.application.rules import protected_paths
 from orchestrator.application.rules.frames import rows_in_frame
-from orchestrator.application.steps import WORKDIR_KEY
+from orchestrator.application.steps import CONVERSATION_KIND, WORKDIR_KEY
 from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY
 from orchestrator.application.use_cases.writers import WriterPorts
@@ -38,6 +38,9 @@ from orchestrator.domain.ports.git import Git
 #: `{initiative_folder}`). A plan below that level declares none, and a Run without one
 #: freezes no `epics.yaml`.
 INITIATIVE_FOLDER_INPUT = "initiative_folder"
+
+#: The Run input naming the initiative's own folder under `initiative_folder`.
+SLUG_INPUT = "slug"
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,7 @@ def frame_anchors(
     frame is expected to keep one tree throughout — H3's templates give an epic's `agent` and
     `git.commit` rows the same `workdir` — and `None` is every caller that predates this.
     """
+    interactive = run.lane == "interactive"
     return protected_paths.FrameAnchors(
         git=git,
         worktree=Path(run.worktree_path or ""),
@@ -95,6 +99,26 @@ def frame_anchors(
         ),
         ranges=_agent_ranges(frame.attempts),
         workdir=row_workdir(row),
+        interactive=interactive,
+        allowed=_allowed(run, frame.rows, row) if interactive else (),
+    )
+
+
+def _allowed(run: Run, rows: Sequence[StepRun], row: StepRun | None) -> tuple[str, ...]:
+    """The patterns the nearest `conversation` row at or before `row` declares (R1)."""
+    if row is None:
+        return ()
+    talks = [
+        c
+        for c in sorted(rows, key=lambda r: r.seq)
+        if c.kind == CONVERSATION_KIND and c.seq <= row.seq
+    ]
+    if not talks:
+        return ()
+    return protected_paths.folder_patterns(
+        protected_paths.declared(talks[-1].with_resolved),
+        str(run.inputs.get(INITIATIVE_FOLDER_INPUT) or ""),
+        str(run.inputs.get(SLUG_INPUT) or ""),
     )
 
 

@@ -68,6 +68,8 @@ def _attempt(
     run_id: UUID,
     log_path: str | None = LOG_PATH,
     status: str = "running",
+    ended_at: datetime | None = None,
+    log_removed_at: datetime | None = None,
 ) -> Attempt:
     return Attempt(
         id=new_id(),
@@ -76,6 +78,8 @@ def _attempt(
         n=1,
         status=status,  # type: ignore[arg-type]
         log_path=log_path,
+        ended_at=ended_at,
+        log_removed_at=log_removed_at,
     )
 
 
@@ -133,9 +137,13 @@ def test_the_router_declares_exactly_one_operation() -> None:
 
 
 def test_log_page_out_schema_fields() -> None:
-    """LogPageOut carries exactly lines, next_cursor and eof."""
+    """LogPageOut carries lines, next_cursor, eof and, since epic 1 story 3 (2026-11-23), the
+    optional state, removed_at and reason."""
     cursor = 42  # any non-zero byte offset
     page = LogPageOut(lines=["a", "b"], next_cursor=cursor, eof=False)
+    assert page.state == "text"
+    assert page.removed_at is None
+    assert page.reason is None
     assert page.lines == ["a", "b"]
     assert page.next_cursor == cursor
     assert page.eof is False
@@ -165,7 +173,7 @@ async def test_first_page_returns_complete_lines_and_eof_false(api: Api) -> None
 
 
 async def test_response_model_keys_are_lines_next_cursor_eof(api: Api) -> None:
-    """The JSON object has exactly the three LogPageOut fields."""
+    """The JSON object has exactly the six LogPageOut fields (epic 1 story 3, 2026-11-23)."""
     attempt = _attempt(run_id=api.run_id)
     api.attempts.add(attempt)
 
@@ -173,7 +181,8 @@ async def test_response_model_keys_are_lines_next_cursor_eof(api: Api) -> None:
         resp = await client.get(api.url(attempt.id))
 
     assert resp.status_code == HTTP_OK
-    assert set(resp.json()) == {"lines", "next_cursor", "eof"}
+    assert set(resp.json()) == {"lines", "next_cursor", "eof", "state", "removed_at", "reason"}
+    assert resp.json()["state"] == "text"
 
 
 # ── Live follow (poll with last next_cursor) ─────────────────────────────────
@@ -230,7 +239,8 @@ def gc_api(env: dict[str, str]) -> Api:
 
 
 async def test_gcd_log_returns_200_with_gc_message(gc_api: Api) -> None:
-    attempt = _attempt(run_id=gc_api.run_id)
+    """Epic 1 story 3 (2026-11-23): the attempt has ended, so the page reads `removed`."""
+    attempt = _attempt(run_id=gc_api.run_id, ended_at=NOW)
     gc_api.attempts.add(attempt)
 
     async with gc_api.client() as client:
@@ -241,6 +251,8 @@ async def test_gcd_log_returns_200_with_gc_message(gc_api: Api) -> None:
     assert body["lines"] == ["log no longer on disk"]
     assert body["next_cursor"] == 0
     assert body["eof"] is True
+    assert body["state"] == "removed"
+    assert body["removed_at"] is None
 
 
 # ── Null log path ─────────────────────────────────────────────────────────────
@@ -252,6 +264,7 @@ def no_log_api(env: dict[str, str]) -> Api:
 
 
 async def test_null_log_path_returns_empty_eof_true(no_log_api: Api) -> None:
+    """Epic 1 story 3 (2026-11-23): the page adds `no_output` and its reason."""
     attempt = _attempt(run_id=no_log_api.run_id, log_path=None)
     no_log_api.attempts.add(attempt)
 
@@ -263,6 +276,54 @@ async def test_null_log_path_returns_empty_eof_true(no_log_api: Api) -> None:
     assert body["lines"] == []
     assert body["next_cursor"] == 0
     assert body["eof"] is True
+    assert body["state"] == "no_output"
+    assert body["reason"] == "no log was recorded for this attempt"
+    assert body["removed_at"] is None
+
+
+async def test_an_ended_empty_file_is_no_output_without_a_reason(env: dict[str, str]) -> None:
+    api = Api(env, raw_by_path={LOG_PATH: b""})
+    attempt = _attempt(run_id=api.run_id, ended_at=NOW)
+    api.attempts.add(attempt)
+
+    async with api.client() as client:
+        body = (await client.get(api.url(attempt.id))).json()
+
+    assert (body["state"], body["lines"], body["eof"], body["reason"]) == (
+        "no_output",
+        [],
+        True,
+        None,
+    )
+
+
+async def test_a_running_attempt_without_its_file_yet_is_text_and_not_eof(
+    gc_api: Api,
+) -> None:
+    attempt = _attempt(run_id=gc_api.run_id)
+    gc_api.attempts.add(attempt)
+
+    async with gc_api.client() as client:
+        body = (await client.get(gc_api.url(attempt.id))).json()
+
+    assert (body["state"], body["lines"], body["eof"], body["removed_at"]) == (
+        "text",
+        [],
+        False,
+        None,
+    )
+
+
+async def test_a_removed_log_carries_the_stored_time_in_utc_with_z(gc_api: Api) -> None:
+    removed = datetime(2026, 11, 22, 3, 4, 5, tzinfo=UTC)
+    attempt = _attempt(run_id=gc_api.run_id, ended_at=NOW, log_removed_at=removed)
+    gc_api.attempts.add(attempt)
+
+    async with gc_api.client() as client:
+        body = (await client.get(gc_api.url(attempt.id))).json()
+
+    assert body["state"] == "removed"
+    assert body["removed_at"] == "2026-11-22T03:04:05Z"
 
 
 # ── Download, file exists ────────────────────────────────────────────────────

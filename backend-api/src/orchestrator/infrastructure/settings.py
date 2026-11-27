@@ -142,8 +142,9 @@ class Settings(BaseSettings):
 
     # ── Database (AD-6) ──────────────────────────────────────────────────────
     database_url: SecretStr
-    dbos_application_version: Annotated[int, Field(ge=1)] = 1
+    dbos_application_version: Annotated[int, Field(ge=1)] = 2
     max_active_runs: Annotated[int, Field(ge=1)] = 2
+    max_interactive_runs: Annotated[int, Field(ge=1)] = 4
     #: The single `recv` the walker parks in lasts this long (AD-13). A setting rather
     #: than a constant so an e2e scenario can shorten the 30 days it defaults to.
     human_wait_seconds: Annotated[int, Field(ge=1)] = 2592000
@@ -159,6 +160,8 @@ class Settings(BaseSettings):
     terminal_poll_cron: str = "*/30 * * * * *"
     #: The facts sweep: fills the fact set of any ended harness attempt that has none.
     facts_sweep_cron: str = "0 * * * *"
+    #: Sets an initiative done once its build's pull requests are merged (SPEC CAP-1, CAP-5).
+    initiative_pr_check_cron: str = "*/15 * * * *"
     #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
     #: is small, so a low ceiling still leaves room for a retry or two.
     readiness_budget_usd: Annotated[Decimal, Field(gt=0)] = Decimal("5")

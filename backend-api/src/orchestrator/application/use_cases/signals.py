@@ -120,7 +120,7 @@ def handle_signal(ports: SignalEffectPorts, run_id: UUID, signal: Signal) -> Sig
     """Validate against AD-13, check the Accept's own agreement, then apply the effect."""
     _refuse_early(ports, run_id, signal)
     outcome = signal_run(ports.signal, run_id, signal)
-    if signal.kind == "cancel" and outcome.cancel_plan is not None:
+    if outcome.cancel_plan is not None:
         _apply_cancel(ports, run_id, outcome.cancel_plan)
     return outcome
 

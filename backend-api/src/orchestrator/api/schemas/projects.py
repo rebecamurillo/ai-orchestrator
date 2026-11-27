@@ -23,13 +23,13 @@ every `PUT` that leaves the field out silently reset the Operator's choice.
 from __future__ import annotations
 
 from pathlib import PurePosixPath
-from typing import Annotated, Final
+from typing import Annotated, Final, Literal
 from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, Field
 
 from orchestrator.api.schemas.clone_check import CloneCheckLineOut
-from orchestrator.api.schemas.common import StorableText, UtcTimestamp
+from orchestrator.api.schemas.common import MoneyStr, StorableText, UtcTimestamp
 from orchestrator.api.schemas.project_runs import ProjectRunOut
 from orchestrator.application.use_cases.project_runs import ProjectRunSummary
 from orchestrator.application.use_cases.projects import (
@@ -160,6 +160,7 @@ class RepositoryOut(BaseModel):
     verify_skipped: bool
     created_at: UtcTimestamp
     updated_at: UtcTimestamp
+    initiative_folder: str = "initiatives"
 
     @classmethod
     def of(cls, repository: Repository) -> RepositoryOut:
@@ -186,6 +187,7 @@ class RepositoryOut(BaseModel):
             verify_skipped=repository.verify_skipped,
             created_at=repository.created_at,
             updated_at=repository.updated_at,
+            initiative_folder=repository.initiative_folder,
         )
 
 
@@ -213,6 +215,12 @@ class ProjectRead(BaseModel):
     #: which is what lets `web-client/tests/unit/newwf-state.test.ts`'s existing `ProjectRead`
     #: fixtures, frozen and predating this story, keep compiling unchanged.
     builtin: bool | None = None
+    #: The defaults this Project's build Run starts with; `null` until set (story 1 of epic 6).
+    default_budget_usd: MoneyStr | None = None
+    default_harness: str | None = None
+    default_model: str | None = None
+    default_autonomy: Literal["auto", "checkpoints"] | None = None
+    default_senior_model: str | None = None
     repositories: list[RepositoryOut]
     runs: list[ProjectRunOut]
     #: How many trajectories this Project has stored (SPEC CAP-6, UX-DR12) — the figure

@@ -229,7 +229,7 @@ def testenqueue_dependents_enqueues_only_when_every_predecessor_is_done() -> Non
 
     enqueue_dependents(ports, engine, second)
 
-    enqueued = [run_id for name, (run_id, _key) in engine.calls if name == "enqueue"]
+    enqueued = [run_id for name, (run_id, _key, _lane) in engine.calls if name == "enqueue"]
     assert enqueued == [dependent.id]
 
 
@@ -289,7 +289,7 @@ def testenqueue_dependents_is_idempotent_for_already_enqueued() -> None:
 
     # engine was NOT called for this already-enqueued run
     enqueue_calls = [args for name, args in engine.calls if name == "enqueue"]
-    assert not any(run_id == already.id for run_id, _ in enqueue_calls)
+    assert not any(run_id == already.id for run_id, _, _ in enqueue_calls)
 
 
 def testenqueue_dependents_handles_run_deleted_between_list_and_get() -> None:

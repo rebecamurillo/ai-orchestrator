@@ -63,12 +63,15 @@ describe('RunCard', () => {
     expect(ageAt).toBeGreaterThan(templateAt);
   });
 
-  it('shows the harness name, tertiary', () => {
-    expect(render({ harness: 'claude' })).toContain('claude');
+  it('shows the type eyebrow with the harness name', () => {
+    // story 10.4, 2026-11-22: the eyebrow reads AUTO · CLAUDE (EXPERIENCE § 6 intro)
+    expect(render({ harness: 'claude' })).toContain('AUTO · CLAUDE');
   });
 
   it('omits the harness segment when none is set', () => {
-    expect(render({ harness: null })).not.toContain('run-card-harness');
+    const markup = render({ harness: null });
+    expect(markup).not.toContain('run-card-harness');
+    expect(markup).toContain('>AUTO<');
   });
 
   it('shows repo-init in place of progress when progress is null', () => {

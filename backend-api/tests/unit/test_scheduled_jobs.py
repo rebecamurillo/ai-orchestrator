@@ -12,7 +12,12 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from orchestrator.infrastructure.dbos.startup import schedule_jobs, serving
-from orchestrator.infrastructure.jobs import CLONE_CHECK_NAME, WORKTREE_GC_NAME, scheduled_jobs
+from orchestrator.infrastructure.jobs import (
+    CLONE_CHECK_NAME,
+    INITIATIVE_PR_CHECK_NAME,
+    WORKTREE_GC_NAME,
+    scheduled_jobs,
+)
 from orchestrator.infrastructure.settings import Settings
 from tests.unit.fakes.git import FakeGit
 
@@ -45,6 +50,8 @@ def test_scheduled_jobs_names_both_and_reads_their_crons_off_settings(
     assert names_and_crons == [
         (CLONE_CHECK_NAME, settings.clone_check_cron),
         (WORKTREE_GC_NAME, settings.worktree_gc_cron),
+        # epic 9 story 1, 2026-11-26: third scheduled job initiative_pr_check
+        (INITIATIVE_PR_CHECK_NAME, settings.initiative_pr_check_cron),
     ]
 
 
@@ -74,7 +81,12 @@ def test_serving_with_the_apps_own_adapters_registers_both_jobs(env: dict[str, s
     with serving(engine, sessions(), FakeGit()):
         schedule_jobs(Settings())
 
-    assert [name for name, _ in engine.scheduled] == [CLONE_CHECK_NAME, WORKTREE_GC_NAME]
+    assert [name for name, _ in engine.scheduled] == [
+        CLONE_CHECK_NAME,
+        WORKTREE_GC_NAME,
+        # epic 9 story 1, 2026-11-26: third scheduled job initiative_pr_check
+        INITIATIVE_PR_CHECK_NAME,
+    ]
 
 
 def test_a_process_that_stopped_serving_schedules_nothing_again(env: dict[str, str]) -> None:

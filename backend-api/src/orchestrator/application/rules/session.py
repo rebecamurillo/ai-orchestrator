@@ -13,6 +13,7 @@ from typing import Any, Literal, get_args
 
 from orchestrator.application.rules import protected_paths
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
+from orchestrator.application.steps import AGENT_KIND, CONVERSATION_KIND, MERGE_KIND
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
@@ -25,8 +26,9 @@ SESSION_ROLE: AttemptRole = "session"
 SESSION_START: SignalKind = "session_start"
 
 #: The context a session opens with: the parked Story, its epic, or the whole Run.
-SessionScope = Literal["story", "epic", "run"]
+SessionScope = Literal["story", "epic", "run", "step"]
 SCOPES: tuple[SessionScope, ...] = get_args(SessionScope)
+STEP_SCOPE: SessionScope = "step"
 
 SCOPE_KEY = "scope"
 HARNESS_KEY = "harness"
@@ -43,6 +45,8 @@ OPENING_SKILL = "senior-session"
 EMPTY_FACT = "-"
 #: Where every turn leaves its answer, in the dispatch tree's self-ignored folder.
 REPLY_FILE = ".orchestrator/session/reply.md"
+#: Where a step session's agent attests, for one turn, that the owner said we are done.
+CLOSE_FILE = ".orchestrator/session/close"
 REPLY_LIMIT = 64 * 1024
 WIP_MESSAGE = "wip: before session (orchestrator)"
 TURN_MESSAGE = "session: turn {k} (orchestrator)"
@@ -119,6 +123,8 @@ def scopes_at(park_path: str | None, rows: Sequence[StepRun]) -> tuple[SessionSc
     """The scopes a session opened at `park_path` has a frame for, in `SCOPES` order."""
     if park_path is None:
         return ()
+    if any(row.path == park_path and row.kind == CONVERSATION_KIND for row in rows):
+        return (STEP_SCOPE,)
     found: list[SessionScope] = []
     if story_frame(park_path) is not None:
         found.append("story")
@@ -126,6 +132,32 @@ def scopes_at(park_path: str | None, rows: Sequence[StepRun]) -> tuple[SessionSc
         found.append("epic")
     found.append("run")
     return tuple(found)
+
+
+def opens_step_session(run: Run, kind: str) -> bool:
+    """A park of this kind opens a step session: a `conversation` stop, or an initiative
+    Run's `merge_conflict` one."""
+    return run.park_kind == kind and (
+        kind == CONVERSATION_KIND or (kind == "merge_conflict" and run.initiative_id is not None)
+    )
+
+
+def merge_session(run: Run) -> bool:
+    """The Run is parked `merge_conflict` and belongs to an initiative."""
+    return run.park_kind == "merge_conflict" and run.initiative_id is not None
+
+
+def parked_skill(row: StepRun, rows: Sequence[StepRun]) -> str | None:
+    """The skill a step session on `row` opens with: the row's own, and on a `git.merge` row
+    that of the last `agent` row before it in its frame. `None` when blank."""
+    if row.kind != MERGE_KIND:
+        return _skill_of(row)
+    earlier = [r for r in rows if r.kind == AGENT_KIND and r.seq < row.seq and r.frame == row.frame]
+    return _skill_of(max(earlier, key=lambda r: r.seq)) if earlier else None
+
+
+def _skill_of(row: StepRun) -> str | None:
+    return str(row.with_resolved.get("skill") or "").strip() or None
 
 
 def confirmed_paths(payload: dict[str, Any]) -> tuple[str, ...]:
@@ -173,10 +205,21 @@ def needs_sweep(turns: Sequence[Attempt], attempt: Attempt) -> bool:
     return not any(turn.n < attempt.n and turn.start_sha for turn in turns)
 
 
-def opening_line(facts: Sequence[str | None], text: str) -> str:
+def opening_line(facts: Sequence[str | None], text: str, skill: str = OPENING_SKILL) -> str:
     """The skill and the stop's facts, values only and `-` when empty, then the text."""
     values = (" ".join(str(fact or "").split()) or EMPTY_FACT for fact in facts)
-    return f"{OPENING_SKILL} {' '.join(values)}\n{text}"
+    return f"{skill} {' '.join(values)}\n{text}"
+
+
+def step_skill_ref(skill: str | None, installed: frozenset[str] | None) -> str | None:
+    """How a step session names its skill: a path as written, a bare name only when the
+    harness catalog lists it or cannot answer, blank as the senior skill; else `None`."""
+    name = (skill or "").strip()
+    if not name:
+        return OPENING_SKILL
+    if "/" in name or installed is None or name in installed:
+        return name
+    return None
 
 
 def capped(reply: str | None) -> str:

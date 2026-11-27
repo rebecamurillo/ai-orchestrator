@@ -69,6 +69,7 @@ from orchestrator.application.steps.context import (
     resolved_text,
 )
 from orchestrator.application.steps.registry import register
+from orchestrator.application.steps.step_log import logged
 from orchestrator.domain.entities.run_records import ROOT_PATH
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.values import Park, StepResult
@@ -107,42 +108,46 @@ class GitCommitExecutor:
     """Stage the spec folder, then everything; refuse a protected path; commit the rest."""
 
     def execute(self, ctx: StepContext) -> StepResult:
-        env = require_env(ctx)
-        worktree = require_cwd(ctx)
-        git = ctx.ports.git
-        message = str(ctx.with_resolved[MESSAGE_KEY])
-        workdir = resolved_text(ctx.with_resolved, WORKDIR_KEY)
-        if workdir:
-            return _in_workdir(ctx, workdir, message)
-        try:
-            if env.spec_folder:
-                git.stage(worktree, env.spec_folder)
-            git.stage(worktree)
-            status = git.status(worktree, ignore_submodules=True)
-        except GitError as error:
-            return _park(ctx, COMMIT_FAILED, output=error.output)
-        changed = _changed(status)
-        if not changed:
-            return StepResult(status="done", gate=ctx.row.gate, reason=NO_CHANGES)
-        hits = _protected(ctx, changed, env.accepted_paths)
-        if hits:
-            reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hits))
-            return StepResult(
-                status="error",
-                gate=ctx.row.gate,
-                reason=reason,
-                park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
-                # The Accept (6.6) compares the Operator's `files` against the list the Run
-                # reported, so this park has to record one too. Paths only: `ProtectedPaths.
-                # check` answers no kinds and its member set is frozen (its own docstring).
-                payload=protected_paths.hits_payload(hits),
-            )
-        try:
-            sha = git.commit(worktree, message)
-        except GitError as error:
-            return _park(ctx, COMMIT_FAILED, output=error.output)
-        records.note_commits(ctx, ((ROOT_PATH, sha),), "git.commit")
-        return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
+        return logged(ctx, lambda inner, _recorder: _commit(inner))
+
+
+def _commit(ctx: StepContext) -> StepResult:
+    env = require_env(ctx)
+    worktree = require_cwd(ctx)
+    git = ctx.ports.git
+    message = str(ctx.with_resolved[MESSAGE_KEY])
+    workdir = resolved_text(ctx.with_resolved, WORKDIR_KEY)
+    if workdir:
+        return _in_workdir(ctx, workdir, message)
+    try:
+        if env.spec_folder:
+            git.stage(worktree, env.spec_folder)
+        git.stage(worktree)
+        status = git.status(worktree, ignore_submodules=True)
+    except GitError as error:
+        return _park(ctx, COMMIT_FAILED, output=error.output)
+    changed = _changed(status)
+    if not changed:
+        return StepResult(status="done", gate=ctx.row.gate, reason=NO_CHANGES)
+    hits = _protected(ctx, changed, env.accepted_paths)
+    if hits:
+        reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hits))
+        return StepResult(
+            status="error",
+            gate=ctx.row.gate,
+            reason=reason,
+            park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
+            # The Accept (6.6) compares the Operator's `files` against the list the Run
+            # reported, so this park has to record one too. Paths only: `ProtectedPaths.
+            # check` answers no kinds and its member set is frozen (its own docstring).
+            payload=protected_paths.hits_payload(hits),
+        )
+    try:
+        sha = git.commit(worktree, message)
+    except GitError as error:
+        return _park(ctx, COMMIT_FAILED, output=error.output)
+    records.note_commits(ctx, ((ROOT_PATH, sha),), "git.commit")
+    return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
 
 
 def _in_workdir(ctx: StepContext, workdir: str, message: str) -> StepResult:

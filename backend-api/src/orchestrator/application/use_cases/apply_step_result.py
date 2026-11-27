@@ -54,12 +54,14 @@ from uuid import UUID
 
 import structlog
 
-from orchestrator.application.rules import signals
+from orchestrator.application.rules import session, signals
 from orchestrator.application.rules.frames import rows_after
 from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases import apply_redispatch
 from orchestrator.application.use_cases.apply_consult import apply_consult, attempt_status
+from orchestrator.application.use_cases.conversation_session import open_step_session
+from orchestrator.application.use_cases.initiative_advance import enqueue_advances, record_advance
 from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.pause_stop import park_before_next
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
@@ -157,12 +159,30 @@ def apply_step_result(
         run = _route(ports, run, row, result, attempt)
         if after_route is not None:
             after_route(run, row, result)
+        run, turn = _open_conversation(ports, run, row, result)
         if run.status == "failed":  # park dependents in same UoW (story 5-4)
             park_dependents(ports, run)
+        record_advance(ports, run)
         ports.uow.commit()
     if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
         enqueue_dependents(ports, ports.engine, run)
+    if turn is not None and ports.engine is not None:
+        ports.engine.enqueue_session_turn(run.id, turn)
+    enqueue_advances(ports.engine, ports, run)
     enqueue_queued(ports.engine, ports.calculations, run)
+
+
+def _open_conversation(
+    ports: WriterPorts, run: Run, row: StepRun, result: StepResult
+) -> tuple[Run, UUID | None]:
+    """The Run re-read, since `after_route` may have re-parked it, and the first turn of
+    the session its `conversation` park opens."""
+    run = require_run(ports, run.id)
+    parked = result.park is not None and session.opens_step_session(run, result.park.kind)
+    if not parked or run.status != "needs_you":
+        return run, None
+    turn = open_step_session(ports, run, ports.steps.list_for_run(run.id), row)
+    return require_run(ports, run.id), turn
 
 
 def _apply_run_updates(ports: WriterPorts, run: Run, result: StepResult) -> Run:
@@ -204,6 +224,8 @@ def _close_attempt(ports: WriterPorts, row: StepRun, result: StepResult) -> Atte
     # Only when named: `agent` wrote its own through `mark_finished`, and this would blank it.
     if result.log_path is not None:
         named["log_path"] = result.log_path
+    if (v := result.verdict) is not None:
+        named |= {"verdict_word": v.word, "verdict_fields": dict(v.fields), "verdict_text": v.text}
     closed = attempt.model_copy(update=named)
     ports.attempts.mark_finished(closed)
     return closed

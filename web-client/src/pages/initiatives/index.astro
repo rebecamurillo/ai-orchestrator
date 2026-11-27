@@ -1,0 +1,82 @@
+---
+/**
+ * Initiatives — every ongoing initiative of every project on one board (story 10.1). One SSR
+ * read, `GET /projects`, feeds the project segments; the `Initiatives` island reads the board
+ * itself. A failed project read leaves only `all projects`; the island still mounts and
+ * reports its own fetch. Switching project is a full navigation to `?project=`.
+ */
+import type { components } from '../../api/schema';
+import Button from '../../components/Button.astro';
+import Shell from '../../layouts/Shell.astro';
+import Initiatives from '../../islands/Initiatives';
+import { backend } from '../../api/server';
+
+export const prerender = false;
+
+type ProjectListItem = components['schemas']['ProjectRead'];
+
+const selectedProjectId = Astro.url.searchParams.get('project');
+const filterParam = Astro.url.searchParams.get('filter');
+const filter = filterParam === 'needs_you' || filterParam === 'all' ? filterParam : 'ongoing';
+
+const view = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'board';
+
+let projects: ProjectListItem[] = [];
+try {
+  const { data, error } = await backend().GET('/api/v1/projects');
+  if (!error) projects = data?.items ?? [];
+} catch {
+  projects = [];
+}
+---
+
+<Shell active="initiatives" title="INITIATIVES">
+  <Fragment slot="filters">
+    <div class="initiatives-project" data-testid="initiatives-project">
+      <a href="/initiatives" aria-current={selectedProjectId ? undefined : 'true'}>all projects</a>
+      {
+        projects.map((project) => (
+          <a
+            href={`/initiatives?project=${encodeURIComponent(project.id)}`}
+            aria-current={selectedProjectId === project.id ? 'true' : undefined}
+          >
+            {project.name}
+          </a>
+        ))
+      }
+    </div>
+    <Button
+      label="+ New initiative"
+      href="/initiatives/new"
+      variant="primary"
+      testId="initiatives-new"
+    />
+  </Fragment>
+
+  <Initiatives
+    client:load
+    initialProjectId={selectedProjectId}
+    initialFilter={filter}
+    initialView={view}
+  />
+</Shell>
+
+<style>
+  .initiatives-project {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-5);
+  }
+
+  .initiatives-project a {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-control);
+    letter-spacing: var(--type-control-tracking);
+    text-transform: var(--type-control-transform);
+    text-decoration: none;
+  }
+
+  .initiatives-project a[aria-current='true'] {
+    color: var(--color-text);
+  }
+</style>

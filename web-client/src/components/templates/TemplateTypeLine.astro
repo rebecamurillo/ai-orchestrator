@@ -1,0 +1,17 @@
+---
+interface Props {
+  type: 'interactive' | 'auto';
+}
+
+const { type } = Astro.props;
+---
+
+<p class="type" data-testid="templates-type">{type.toUpperCase()}</p>
+
+<style>
+  .type {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-micro);
+    line-height: var(--type-micro-line);
+  }
+</style>

@@ -5,7 +5,7 @@ audience: any
 ---
 # Dispatch and supervise an initiative
 
-This skill takes an initiative folder that `initiatives/spec` declared ready and turns it
+This skill takes an initiative folder that the project's package declared ready (`initiatives/package`) and turns it
 into one Run, then stays with that Run until it finishes or needs its human. It assumes the
 connection pages: the version handshake and the connection values (`connect`), the endpoint
 reference (`api`) and the poll cadence (`runs/monitor`) are all there, and
@@ -22,10 +22,10 @@ have all moved since it was written.
 
 - `POST /api/v1/runs/preflight` with the inputs you are actually about to send — template,
   version, project, repository, base branch, `inputs`, harness, model, budget. The gate and
-  what each check means is `initiatives/spec` step 7; follow it there rather than
+  what each check means is the package's procedure in the hub repository (`initiatives/package`); follow it there rather than
   re-deriving it here.
 - Any `fail` line stops the dispatch. Report the line and its `fix`; a fix that belongs in
-  the folder goes back through `initiatives/spec`, not into a hand-edit here.
+  the folder goes back through the package's procedure (`initiatives/package`), not into a hand-edit here.
 - `open_questions` must be empty. One open question is one park waiting to happen.
 - Confirm `rows[]` is the plan you expect — the right epic count, the right story frames.
   A surprise here is a projection defect, which is cheap now and expensive at story 40.

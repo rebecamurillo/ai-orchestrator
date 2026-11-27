@@ -20,14 +20,21 @@ from uuid import UUID
 
 from orchestrator.application.use_cases.session_turn import TurnPorts, commit_turn, run_turn
 from orchestrator.application.use_cases.writers import WriterPorts
+from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.infrastructure.dbos.facade import DurableEngine
+from orchestrator.infrastructure.dbos.step_close import step_close_ports
 from orchestrator.infrastructure.dbos.walker import HOLD_POLL_SECONDS, WalkerDeps
 
 
-def build_session_turn(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
-    """Declare the turn's two steps and its workflow on `engine`, and return the workflow."""
-    turn = engine.step(_session_turn(deps))
-    commit = engine.step(_session_commit(deps))
+def build_session_turn(
+    engine: DurableEngine, deps: WalkerDeps, signals: WorkflowEngine | None = None
+) -> Callable[[str], None]:
+    """Declare the turn's two steps and its workflow on `engine`, and return the workflow.
+
+    `signals` is the engine `step_close` wakes the walk through; without one the turn end
+    sends nothing."""
+    turn = engine.step(_session_turn(deps, signals))
+    commit = engine.step(_session_commit(deps, signals))
 
     def run_session_turn(attempt_id: str) -> None:
         try:
@@ -38,15 +45,20 @@ def build_session_turn(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str
     return engine.workflow(run_session_turn)
 
 
-def _ports(deps: WalkerDeps, writers: WriterPorts) -> TurnPorts:
-    return TurnPorts(writers=writers, step=deps.step_ports, read_environment=deps.read_environment)
+def _ports(deps: WalkerDeps, writers: WriterPorts, signals: WorkflowEngine | None) -> TurnPorts:
+    return TurnPorts(
+        writers=writers,
+        step=deps.step_ports,
+        read_environment=deps.read_environment,
+        signal=step_close_ports(writers, signals) if signals is not None else None,
+    )
 
 
-def _session_turn(deps: WalkerDeps) -> Callable[[str], None]:
+def _session_turn(deps: WalkerDeps, signals: WorkflowEngine | None) -> Callable[[str], None]:
     def session_turn(attempt_id: str) -> None:
         while True:
             with deps.open_ports() as writers:
-                held = run_turn(_ports(deps, writers), UUID(attempt_id))
+                held = run_turn(_ports(deps, writers, signals), UUID(attempt_id))
             if held is None:
                 return
             deps.sleep(HOLD_POLL_SECONDS)
@@ -54,9 +66,9 @@ def _session_turn(deps: WalkerDeps) -> Callable[[str], None]:
     return session_turn
 
 
-def _session_commit(deps: WalkerDeps) -> Callable[[str], None]:
+def _session_commit(deps: WalkerDeps, signals: WorkflowEngine | None) -> Callable[[str], None]:
     def session_commit(attempt_id: str) -> None:
         with deps.open_ports() as writers:
-            commit_turn(_ports(deps, writers), UUID(attempt_id))
+            commit_turn(_ports(deps, writers, signals), UUID(attempt_id))
 
     return session_commit

@@ -8,7 +8,9 @@ the engine's. What it owns is the two decisions AD-6 and AD-12 name:
   is the Run's own, an `enqueue` repeated after a lost response finds the workflow it already
   started instead of starting a second walk. `attempt.engine_ref` adds the `step_id` of the
   durable step that opened the Attempt, which is what `attempt_record` reads back.
-- **One queue, `MAX_ACTIVE_RUNS` wide, one Run per Repository.** The partition key is the
+- **One walk queue, `MAX_ACTIVE_RUNS` wide, one Run per Repository.** A Run in the
+  interactive lane waits on a queue of its own, `MAX_INTERACTIVE_RUNS` wide, so a conversation
+  that lasts days never takes a walk slot (AD-12 amended). The partition key is the
   Repository id, so two Runs against one Repository serialise without a lock table, and the
   slot and the partition are held for the whole life of the walk — including the `recv` a
   parked Run waits in (AD-12; PRD FR-13 states the trade-off). A senior session turn runs
@@ -27,15 +29,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 
 from orchestrator.domain.ports.engine import EngineRecord, QueueEntry, QueueState
+from orchestrator.domain.statuses import Lane
 from orchestrator.domain.values import Signal
+from orchestrator.infrastructure.dbos.advance import build_advance
 from orchestrator.infrastructure.dbos.calculation import build_calculation
 from orchestrator.infrastructure.dbos.config import (
     HUMAN_TOPIC,
+    INTERACTIVE_QUEUE,
     QUEUE_NAME,
     SESSION_QUEUE,
     STEP_ID,
@@ -59,6 +64,9 @@ ENGINE_LAUNCHED = "durable engine launched"
 
 #: The engine's two words for a workflow the queue holds, as the port's own two.
 STATES: dict[str, QueueState] = {ENQUEUED: "enqueued", PENDING: "pending"}
+
+#: The queue each lane's Runs are enqueued on.
+QUEUE_BY_LANE: dict[Lane, str] = {"walk": QUEUE_NAME, "interactive": INTERACTIVE_QUEUE}
 
 #: What `attempt_record` reports when the engine's own record carries no error.
 SUCCEEDED = "succeeded"
@@ -84,6 +92,7 @@ class DbosWorkflowEngine:
         self._walk: Callable[[str], None] | None = None
         self._turn: Callable[[str], None] | None = None
         self._calculation: Callable[[str], None] | None = None
+        self._advance: Callable[[str], None] | None = None
 
     def launch(self) -> None:
         """Start the engine: from here it dequeues Runs and recovers interrupted ones."""
@@ -91,18 +100,26 @@ class DbosWorkflowEngine:
         self._walk = build_walk(self._engine, self._deps)
         # before `start`, which recovers a turn a dead backend left running only once its
         # workflow is registered (AD-23)
-        self._turn = build_session_turn(self._engine, self._deps)
+        self._turn = build_session_turn(self._engine, self._deps, self)
         self._calculation = build_calculation(self._engine, self._deps)
+        if self._deps.advance_writes is not None:
+            self._advance = build_advance(self._engine, self._deps)
         self._engine.start()
         # after `start`, and that is the library's order rather than a preference: declaring
         # the queue writes its concurrency to the system database, which does not exist until
         # the engine is started. The queue manager picks a queue up on its next poll.
         self._engine.register_queue(QUEUE_NAME, concurrency=self._config.max_active_runs)
-        self._engine.register_queue(SESSION_QUEUE, concurrency=self._config.max_active_runs)
+        self._engine.register_queue(
+            INTERACTIVE_QUEUE, concurrency=self._config.max_interactive_runs
+        )
+        self._engine.register_queue(
+            SESSION_QUEUE,
+            concurrency=self._config.max_active_runs + self._config.max_interactive_runs,
+        )
         log.info(ENGINE_LAUNCHED, version=self._config.application_version)
 
-    def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
-        """Put a Run behind its (Repository, declared-branch) partition (AD-12).
+    def enqueue(self, run_id: UUID, partition_key: str, lane: Lane) -> dict[str, Any]:
+        """Put a Run behind its (Repository, declared-branch) partition (AD-12), on its lane.
 
         Returns the `engine_ref` for the enqueued workflow.
         """
@@ -112,7 +129,7 @@ class DbosWorkflowEngine:
             log.info("enqueue_no_op", run_id=str(run_id))
             return {WORKFLOW_ID: str(run_id)}
         self._engine.enqueue(
-            QUEUE_NAME, self._walker(), str(run_id), partition_key=str(partition_key)
+            QUEUE_BY_LANE[lane], self._walker(), str(run_id), partition_key=str(partition_key)
         )
         return {WORKFLOW_ID: str(run_id)}
 
@@ -138,10 +155,38 @@ class DbosWorkflowEngine:
             SESSION_QUEUE, self._calculation, str(calculation_id), partition_key=str(calculation_id)
         )
 
+    def enqueue_advance(self, advance_id: UUID) -> None:
+        """One initiative advance on the session queue, partitioned by its own id. The workflow
+        id is fresh on every call: the advance is consumed by its row, not by the engine, and a
+        workflow id the engine remembers as finished would never run a second time."""
+        if self._advance is None:
+            raise RuntimeError(NOT_LAUNCHED)
+        self._engine.enqueue(
+            SESSION_QUEUE,
+            self._advance,
+            f"{advance_id}:{uuid4().hex}",
+            partition_key=str(advance_id),
+        )
+
+    def held_advances(self) -> frozenset[UUID]:
+        """The advances the session queue holds: workflow ids of the form `{advance}:{hex}`."""
+        return frozenset(
+            UUID(entry.workflow_id.partition(":")[0])
+            for entry in self._engine.queued(SESSION_QUEUE)
+            if ":" in entry.workflow_id
+        )
+
     def held_calculations(self) -> frozenset[UUID]:
         """The ids the session queue holds, enqueued or running (calculation ids never collide
-        with attempt ids: both are UUIDv7)."""
-        return frozenset(UUID(entry.workflow_id) for entry in self._engine.queued(SESSION_QUEUE))
+        with attempt ids: both are UUIDv7). An advance's workflow id holds a `:` and is not one."""
+        return self._plain_ids()
+
+    def _plain_ids(self) -> frozenset[UUID]:
+        return frozenset(
+            UUID(entry.workflow_id)
+            for entry in self._engine.queued(SESSION_QUEUE)
+            if ":" not in entry.workflow_id
+        )
 
     @property
     def walker_deps(self) -> WalkerDeps:
@@ -150,13 +195,13 @@ class DbosWorkflowEngine:
 
     def held_session_turns(self) -> frozenset[UUID]:
         """The turns the session queue holds, enqueued or running: the engine's to recover."""
-        return frozenset(UUID(entry.workflow_id) for entry in self._engine.queued(SESSION_QUEUE))
+        return self._plain_ids()
 
     def signal(self, run_id: UUID, signal: Signal) -> None:
         """Deliver one Operator signal (AD-13) to the Run's single `recv` wait."""
         self._engine.send(
             str(run_id),
-            signal.model_dump(mode="json", exclude={"stop"}),
+            signal.model_dump(mode="json"),
             HUMAN_TOPIC.format(run_id=run_id),
         )
 
@@ -174,7 +219,15 @@ class DbosWorkflowEngine:
 
     def list_queue(self) -> list[QueueEntry]:
         """Every Run this engine is holding, queued or pending, oldest first."""
-        held = sorted(self._engine.queued(QUEUE_NAME), key=lambda entry: entry.enqueued_at)
+        return [
+            entry
+            for lane, queue in QUEUE_BY_LANE.items()
+            for entry in self._lane_entries(queue, lane)
+        ]
+
+    def _lane_entries(self, queue: str, lane: Lane) -> list[QueueEntry]:
+        """One lane's held workflows, oldest first, `ENQUEUED` ones numbered from 1."""
+        held = sorted(self._engine.queued(queue), key=lambda entry: entry.enqueued_at)
         waiting = 0
         entries: list[QueueEntry] = []
         for workflow in held:
@@ -182,7 +235,7 @@ class DbosWorkflowEngine:
             if workflow.state == ENQUEUED:
                 waiting += 1
                 position = waiting
-            entries.append(_entry(workflow, position))
+            entries.append(_entry(workflow, position, lane))
         return entries
 
     def attempt_record(self, engine_ref: dict[str, Any]) -> EngineRecord | None:
@@ -204,11 +257,12 @@ class DbosWorkflowEngine:
         self._engine.schedule(name, cron, job)
 
 
-def _entry(workflow: QueuedWorkflow, position: int | None) -> QueueEntry:
+def _entry(workflow: QueuedWorkflow, position: int | None, lane: Lane) -> QueueEntry:
     """One held workflow as the port's own row. An unknown state is reported as pending."""
     return QueueEntry(
         run_id=UUID(workflow.workflow_id),
         engine_state=STATES.get(workflow.state, "pending"),
         position=position,
         enqueued_at=workflow.enqueued_at,
+        lane=lane,
     )

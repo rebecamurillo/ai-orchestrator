@@ -114,6 +114,7 @@ class FakeGit(FakeAnalysisGit):
         worktree_add: list[Any] | None = None,
         sync: list[Any] | None = None,
         merge: list[Any] | None = None,
+        merge_in_progress: list[Any] | None = None,
         status: list[Any] | None = None,
         status_ignoring_submodules: list[Any] | None = None,
         stage: list[Any] | None = None,
@@ -150,6 +151,7 @@ class FakeGit(FakeAnalysisGit):
         #: How far each per-tree `heads` script has been read — one cursor per tree, so the
         #: hub's start/end pair is not consumed by the submodule's own two calls (H4).
         self._head_used: dict[str, int] = {}
+        self._concluded = False
         self._scripts: dict[str, list[Any]] = {
             "ls_remote": ls_remote or [DEFAULT_REF],
             "base_exists": base_exists or [False],
@@ -163,6 +165,7 @@ class FakeGit(FakeAnalysisGit):
             # `None` rather than a sha: a fake nobody scripted has nothing to merge, which
             # is the answer that changes no branch (`already merged`, S4).
             "merge": merge if merge is not None else [None],
+            "merge_in_progress": merge_in_progress or [False],
             "status": status or [""],
             # Not a port method of its own: the answer `status(ignore_submodules=True)` gives
             # when a test scripted one. Unscripted, the flag changes nothing the fake says,
@@ -247,6 +250,10 @@ class FakeGit(FakeAnalysisGit):
         answer: str | NoUpstream | None = self._answer("merge", (worktree, branch))
         return answer
 
+    def merge_in_progress(self, worktree: Path) -> bool:
+        answer: bool = self._answer("merge_in_progress", (worktree,))
+        return answer and not self._concluded
+
     def status(self, worktree: Path, *, ignore_submodules: bool = False) -> str:
         """Porcelain, optionally with submodule state left out of it (H7, 2026-09-24).
 
@@ -284,6 +291,8 @@ class FakeGit(FakeAnalysisGit):
         # (H2, 2026-09-23).
         arguments = (worktree, message) if workdir is None else (worktree, message, workdir)
         answer: str | None = self._answer("commit", arguments)
+        # a commit with `MERGE_HEAD` present is the merge commit: git concludes the merge
+        self._concluded = True
         return answer
 
     def diff_names(self, worktree: Path, from_sha: str) -> tuple[str, ...]:

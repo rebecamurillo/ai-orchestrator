@@ -20,7 +20,8 @@
 #      database that cannot be migrated fails the container instead of a request (spine
 #      Operations). The application repeats this as its start-up step; the second call
 #      finds the schema already at head and applies nothing.
-#   6. the application replaces this shell, so PID 1 is uvicorn and SIGTERM reaches it.
+#   6. the application replaces this shell, so SIGTERM reaches uvicorn through compose's
+#      `init: true`, the PID 1 that also reaps the orphans steps leave (issue #25).
 #
 # No credential is read here. Everything comes from the process environment, which compose
 # fills from `.env`.

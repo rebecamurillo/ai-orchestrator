@@ -22,6 +22,9 @@ Notes record why: `tests/unit/test_run_repository_adapter.py`'s closed set of nu
 joined it. A `NOT NULL` boolean reaches the same idempotency without touching that set, and
 `run.worktrees` itself is left as history rather than cleared, so a swept Run's own record
 still says which branch it worked on after the files are gone.
+
+The sweep also stamps `log_removed_at` on the Run's attempts so the log endpoint can say when
+the file went (AD-40).
 """
 
 from __future__ import annotations
@@ -38,7 +41,7 @@ from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
-from orchestrator.domain.ports.repositories import RunRepository
+from orchestrator.domain.ports.repositories import AttemptRepository, RunRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.ports.workspace import Workspace
 from orchestrator.domain.statuses import TERMINAL_RUN
@@ -62,6 +65,7 @@ class WorktreeGcPorts:
     #: Rooted at `{WORK_DIR}/logs` by the caller (`infrastructure/jobs.py`) — this module
     #: never builds a path itself.
     logs: Workspace
+    attempts: AttemptRepository
     clock: Clock
     read_environment: ReadEnvironment
     work_dir: str
@@ -97,6 +101,7 @@ def _sweep(ports: WorktreeGcPorts, run: Run) -> None:
         for worktree in run.worktrees:
             ports.git.remove_worktree(base, Path(worktree.path))
     ports.logs.remove(str(run.id))
+    ports.attempts.mark_logs_removed(run.id, ports.clock.now())
     ports.runs.update(run.model_copy(update={"worktrees_removed": True}))
     ports.uow.commit()
     log.info("worktree gc", run_id=str(run.id))

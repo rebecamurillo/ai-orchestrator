@@ -25,7 +25,8 @@ EXPECTED_CONCURRENCY = 2
 def test_the_engine_reads_its_three_values_from_the_typed_settings(env: dict[str, str]) -> None:
     config = engine_config(Settings())
 
-    assert config.application_version == "1"
+    # story 2 (epic 4 conversation stop), 2026-11-22: the engine version is 2
+    assert config.application_version == "2"
     assert config.max_active_runs == EXPECTED_CONCURRENCY
     assert config.database_url.startswith("postgresql+psycopg://")
 
@@ -39,7 +40,8 @@ def test_the_version_is_the_pinned_setting_and_not_a_hash_of_the_source(
     env: dict[str, str],
 ) -> None:
     """A version that moved with the source would make running Runs unrecoverable (AD-6)."""
-    assert dbos_config(engine_config(Settings()))["application_version"] == "1"
+    # story 2 (epic 4 conversation stop), 2026-11-22: the engine version is 2
+    assert dbos_config(engine_config(Settings()))["application_version"] == "2"
 
 
 def test_the_engine_shares_the_applications_database(env: dict[str, str]) -> None:

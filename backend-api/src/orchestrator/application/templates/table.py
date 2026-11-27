@@ -33,8 +33,19 @@ INPUT_TYPE_KEY = "type"
 DESCRIPTION_KEY = "description"
 
 METRICS_KEY = "metrics"
+TEMPLATE_TYPE_KEY = "type"
+TEMPLATE_TYPES = ("interactive", "auto")
+DEFAULT_TEMPLATE_TYPE = "auto"
 TEMPLATE_KEYS = frozenset(
-    {NAME_KEY, VERSION_KEY, DESCRIPTION_KEY, INPUTS_KEY, STEPS_KEY, METRICS_KEY}
+    {
+        NAME_KEY,
+        VERSION_KEY,
+        DESCRIPTION_KEY,
+        INPUTS_KEY,
+        STEPS_KEY,
+        METRICS_KEY,
+        TEMPLATE_TYPE_KEY,
+    }
 )
 INPUT_KEYS = frozenset({INPUT_TYPE_KEY, "required", "default", "values", DESCRIPTION_KEY})
 ROLE_KEY = "role"
@@ -84,6 +95,12 @@ CONSULT_ON = frozenset({"blocked", "protected_path"})
 #: stop is implied, so `on` is optional and may only name it.
 REDISPATCH_CONSULT_ON = frozenset({"verify_failed"})
 REDISPATCH_CONSULT_REQUIRED = ("model", "skill", PROMPTS_KEY)
+
+#: The keys only a `uses: conversation` step carries beside `STEP_KEYS`, and the names inside
+#: its `prompts` and `expect` blocks (AD-15 amended).
+CONVERSATION_KEYS = frozenset({"expect", WRITES_KEY, PROMPTS_KEY})
+CONVERSATION_PROMPTS_KEYS = frozenset({"open", "close"})
+CONVERSATION_EXPECT_KEYS = frozenset({"files", "success", "blocked"})
 
 #: The three dispatch forms an `agent` `with` block may carry — only one at a time.
 AGENT_DISPATCH_KEYS: frozenset[str] = frozenset({"skill", "prompt", "prompt_file"})

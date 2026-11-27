@@ -3,7 +3,8 @@
  * after `CancelModal`. Presents a RENDERED · SOURCE · RAW toggle, a download control, and —
  * when the run is parked without a terminal session and the path is not a list file — an
  * Edit + Save path through `PUT /runs/{id}/files`. Save errors are surfaced verbatim so git
- * output is never lost. The modal follows `CancelModal`'s own structure: outer div (fixed
+ * output is never lost. `run` null renders the file read-only (the Initiative page has no Run
+ * to edit on). The modal follows `CancelModal`'s own structure: outer div (fixed
  * inset, flex centre), backdrop div (fixed inset, opacity 0.8, onClick=onClose), panel div
  * (relative, raised surface, border). Never a native `<dialog>`.
  */
@@ -35,7 +36,7 @@ type Tab = 'rendered' | 'source' | 'raw';
 interface Props {
   runId: string;
   path: string;
-  run: RunSummary;
+  run: RunSummary | null;
   folder: string;
   onClose: () => void;
   onSaved?: () => void;
@@ -148,7 +149,7 @@ export default function ArtifactModal({ runId, path, run, folder, onClose, onSav
     }
   }
 
-  const canEdit = canEditFile(run, path, folder);
+  const canEdit = run !== null && canEditFile(run, path, folder);
   const listFile = isListFile(folder, path);
   const isYaml = path.endsWith('.yaml') || path.endsWith('.yml');
   const basename = path.split('/').at(-1) ?? path;
@@ -239,7 +240,7 @@ export default function ArtifactModal({ runId, path, run, folder, onClose, onSav
         </div>
         <div data-testid="wf-file-viewer">
           {!editing ? renderBody() : null}
-          {editing && content !== null ? (
+          {editing && content !== null && run !== null ? (
             <div className="wf-artifact-modal-body">
               <FileEditor
                 path={path}
@@ -261,7 +262,7 @@ export default function ArtifactModal({ runId, path, run, folder, onClose, onSav
               ) : null}
             </div>
           ) : null}
-          {listFile ? (
+          {listFile && run !== null ? (
             <p className="wf-artifact-modal-readonly" data-testid="artifacts-readonly">
               {readOnlyLine(run.plan_ref)}
             </p>

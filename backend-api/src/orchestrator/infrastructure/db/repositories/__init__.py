@@ -21,12 +21,19 @@ from orchestrator.infrastructure.db.repositories.gate_records import (
 )
 from orchestrator.infrastructure.db.repositories.harnesses import SQLAlchemyHarnessRepository
 from orchestrator.infrastructure.db.repositories.history import SQLAlchemyHistoryQuery
+from orchestrator.infrastructure.db.repositories.initiatives import (
+    SQLAlchemyInitiativeAdvanceRepository,
+    SQLAlchemyInitiativeRepository,
+)
 from orchestrator.infrastructure.db.repositories.instance_hold import (
     SQLAlchemyInstanceHoldRepository,
 )
 from orchestrator.infrastructure.db.repositories.metric_results import (
     SQLAlchemyMetricCalculationRepository,
     SQLAlchemyResultVersionRepository,
+)
+from orchestrator.infrastructure.db.repositories.packages import (
+    SQLAlchemyProjectPackageRepository,
 )
 from orchestrator.infrastructure.db.repositories.project_channel import (
     SQLAlchemyProjectChannelRepository,
@@ -55,9 +62,12 @@ __all__ = [
     "SQLAlchemyGatewayReadRepository",
     "SQLAlchemyHarnessRepository",
     "SQLAlchemyHistoryQuery",
+    "SQLAlchemyInitiativeAdvanceRepository",
+    "SQLAlchemyInitiativeRepository",
     "SQLAlchemyInstanceHoldRepository",
     "SQLAlchemyMetricCalculationRepository",
     "SQLAlchemyProjectChannelRepository",
+    "SQLAlchemyProjectPackageRepository",
     "SQLAlchemyProjectRepository",
     "SQLAlchemyRepositoryRepository",
     "SQLAlchemyResultVersionRepository",

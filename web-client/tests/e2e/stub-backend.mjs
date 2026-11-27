@@ -61,13 +61,34 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 
-import { PROJECTS_BY_ID, RECHECK_REPOSITORY_ID } from './projects-fixtures.mjs';
+import { CLEAN_ID, MIXED_ID, PROJECTS_BY_ID, RECHECK_REPOSITORY_ID } from './projects-fixtures.mjs';
+
+const STOPPED_BUILD_RUN = '0193a000-0000-7000-8000-0000000000c4';
 import { TEMPLATES } from './templates-fixtures.mjs';
 
 const PORT = Number(process.env.STUB_BACKEND_PORT ?? 8788);
 const TOKEN = process.env.ORCHESTRATOR_TOKEN ?? '';
 
 const PROBLEM = 'application/problem+json';
+const initiativeMessages = [];
+function initiativeTurn(n, status, message, reply) {
+  return {
+    attempt_id: `0193a000-0000-7000-8000-00000000e0${n}`,
+    author: 'operator',
+    defects: null,
+    ended_at: status === 'done' ? '2026-11-26T21:16:00Z' : null,
+    failure_reason: null,
+    message,
+    model: 'claude-opus-5-5',
+    n,
+    owner: null,
+    reply,
+    round: 1,
+    run_id: '0193a000-0000-7000-8000-0000000000c1',
+    started_at: '2026-11-26T21:15:00Z',
+    status,
+  };
+}
 const JSON_TYPE = 'application/json';
 
 /**
@@ -276,6 +297,8 @@ function simulateCloneCheck(repository) {
     hint: repository.clone_check_hint,
   };
 }
+
+const packageOverrides = {};
 
 function readJsonBody(request) {
   return new Promise((resolve, reject) => {
@@ -551,6 +574,7 @@ function saveTemplateVersion(name, yamlText) {
   const saved = {
     name,
     version: declaredVersion,
+    type: template.versions[maxVersion].type,
     yaml: yamlText,
     hash: sha256Hex(yamlText),
     calls: [],
@@ -717,6 +741,468 @@ createServer(async (request, response) => {
     send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
     return;
   }
+  if (pathname === '/api/v1/initiatives' && request.method === 'GET') {
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({
+        columns: [
+          { workflow: 'spec', type: 'interactive' },
+          { workflow: 'build', type: 'auto' },
+        ],
+        counts: { ongoing: 1, need_you: 1, cancelled: 0, oldest_wait_at: new Date().toISOString() },
+        items: [
+          {
+            attention: 'your_turn',
+            id: '0193a000-0000-7000-8000-000000000001',
+            line: 'ux · your turn · 14 turns',
+            name: 'Initiative steps',
+            position: 0,
+            progress: '1 of 3 steps',
+            project_id: '0193a000-0000-7000-8000-000000000002',
+            project_name: 'Orchestrator',
+            reason: '',
+            repo_tag: ['ai-orchestrator'],
+            repository_id: '0193a000-0000-7000-8000-000000000003',
+            slug: 'initiative-steps',
+            status: 'waiting for her',
+            step: 'ux',
+            updated_at: new Date().toISOString(),
+            workflow: 'spec',
+            workflow_count: 2,
+            workflows: [
+              { workflow: 'spec', type: 'interactive', state: 'ongoing' },
+              { workflow: 'build', type: 'auto', state: null },
+            ],
+          },
+        ],
+        next_cursor: null,
+      }),
+    );
+    return;
+  }
+  if (/^\/api\/v1\/runs\/[^/]+\/session\/messages$/.test(pathname) && request.method === 'POST') {
+    let raw = '';
+    request.on('data', (chunk) => (raw += chunk));
+    request.on('end', () => {
+      const { text } = JSON.parse(raw || '{}');
+      initiativeMessages.push(text);
+      send(
+        response,
+        202,
+        JSON_TYPE,
+        JSON.stringify({
+          attempt_id: '0193a000-0000-7000-8000-0000000000d1',
+          cost_usd: null,
+          ended_at: null,
+          exit_code: null,
+          message: text,
+          reply: '',
+          started_at: null,
+          status: 'queued',
+          turn: 15 + initiativeMessages.length,
+        }),
+      );
+    });
+    return;
+  }
+  // Story 11.5: the answers to the stops. Placed before the broader initiative branch.
+  if (/^\/api\/v1\/runs\/[^/]+\/session\/retry$/.test(pathname) && request.method === 'POST') {
+    send(
+      response,
+      201,
+      JSON_TYPE,
+      JSON.stringify({
+        attempt_id: '0193a000-0000-7000-8000-0000000000d2',
+        cost_usd: null,
+        ended_at: null,
+        exit_code: null,
+        message: '',
+        reply: '',
+        started_at: null,
+        status: 'queued',
+        turn: 15,
+      }),
+    );
+    return;
+  }
+  if (/^\/api\/v1\/initiatives\/[^/]+\/reopen$/.test(pathname) && request.method === 'POST') {
+    send(
+      response,
+      201,
+      JSON_TYPE,
+      JSON.stringify({ round: 2, run_id: '0193a000-0000-7000-8000-0000000000c1', step: 'ux' }),
+    );
+    return;
+  }
+  const runDefaultsMatch = pathname.match(/^\/api\/v1\/projects\/([^/]+)\/run-defaults$/);
+  if (runDefaultsMatch && request.method === 'PUT') {
+    const project = projects[runDefaultsMatch[1]];
+    if (!project) {
+      notFound(response, 'Project not found');
+      return;
+    }
+    await readJsonBody(request);
+    send(response, 200, JSON_TYPE, JSON.stringify(project));
+    return;
+  }
+  // start-next and cancel answer the same detail body as the GET (story 11.4).
+  if (
+    (/^\/api\/v1\/initiatives\/[^/]+$/.test(pathname) && request.method === 'GET') ||
+    (/^\/api\/v1\/initiatives\/[^/]+\/(start-next|cancel)$/.test(pathname) &&
+      request.method === 'POST')
+  ) {
+    const ids = ['product', 'arch', 'ux', 'plan', 'review', 'close'];
+    const steps = ids.map((id, i) => ({
+      id,
+      kind: 'conversation',
+      status: i < 2 ? 'done' : i === 2 ? 'running' : 'planned',
+      token: i < 2 ? 'DON' : i === 2 ? 'RUN' : 'QUE',
+      line: i === 2 ? 'your turn · 14 turns' : '',
+      agent: 'analyst',
+      turns: [],
+      files: [],
+      files_state: i < 2 ? 'done' : i === 2 ? 'open' : 'to come',
+      conflict_files: [],
+      ...(id === 'ux'
+        ? {
+            park_kind: 'conversation',
+            park_seq: 7,
+            run_id: '0193a000-0000-7000-8000-0000000000c1',
+            file: 'DESIGN.md',
+            files: [
+              {
+                path: 'DESIGN.md',
+                changed: true,
+                draft: true,
+                run_id: '0193a000-0000-7000-8000-0000000000c1',
+                time: '2026-11-22T21:30:00Z',
+              },
+            ],
+            harness: 'claude',
+            model: 'claude-opus-5-5',
+            turns: [
+              initiativeTurn(14, 'done', 'Which colours?', 'Warm ones.'),
+              initiativeTurn(15, 'running', 'And the fonts?', ''),
+              ...initiativeMessages.map((text, k) => initiativeTurn(16 + k, 'queued', text, '')),
+            ],
+          }
+        : {}),
+    }));
+    const detailId = pathname.split('/').pop();
+    const mergeStop = detailId === '0193a000-0000-7000-8000-0000000000f2';
+    const budgetStop = detailId === '0193a000-0000-7000-8000-0000000000f3';
+    const buildStop = detailId === '0193a000-0000-7000-8000-0000000000f4';
+    if (mergeStop) {
+      steps.push({
+        id: 'merge',
+        kind: 'automatic',
+        status: 'waiting for her',
+        token: 'BLK',
+        line: 'merge conflict',
+        agent: 'merge agent',
+        turns: [],
+        files: [],
+        files_state: 'open',
+        conflict_files: ['planning/decision-log.md'],
+        park_kind: 'merge_conflict',
+        park_seq: 8,
+        run_id: '0193a000-0000-7000-8000-0000000000c2',
+      });
+      for (const s of steps) {
+        if (s.id === 'ux') Object.assign(s, { status: 'done', token: 'DON', park_kind: null });
+      }
+    }
+    const body = {
+      id: detailId,
+      slug: 'familio-dessin-v2',
+      name: 'Familio Dessin v2',
+      status: 'running',
+      workflow: 'spec',
+      step: 'ux',
+      current_step: 'ux',
+      current_position: 1,
+      workflow_count: 2,
+      attention: 'your_turn',
+      reason: '',
+      hub: { id: '0193a000-0000-7000-8000-0000000000a1', slug: 'hub-repo' },
+      folder: 'initiatives/familio-dessin-v2',
+      package: 'orchestrator-default',
+      sequence_fixed_at: '2026-11-20T10:00:00Z',
+      created_at: '2026-11-19T09:00:00Z',
+      project: { id: '0193a000-0000-7000-8000-0000000000b1', name: 'Familio' },
+      project_id: '0193a000-0000-7000-8000-0000000000b1',
+      project_name: 'Familio',
+      repo_tag: ['familio-web'],
+      runs: [],
+      sessions: [
+        {
+          workflow: 'spec',
+          step: 'product',
+          kind: 'session',
+          id: '0193a1b2-0000-7000-8000-0000000011ab',
+          round: 1,
+          state: 'closed',
+        },
+        {
+          workflow: 'spec',
+          step: 'ux',
+          kind: 'session',
+          id: '0193c3d4-0000-7000-8000-000000007f21',
+          round: 1,
+          state: 'open',
+        },
+      ],
+      workflows: [
+        {
+          workflow: 'spec',
+          position: 1,
+          type: 'interactive',
+          template: 'initiative-hub',
+          version: 1,
+          run_id: null,
+          status: null,
+          token: 'RUN',
+          line: 'ux · your turn',
+          steps,
+          files: [],
+        },
+        {
+          workflow: 'build',
+          position: 2,
+          type: 'auto',
+          template: 'initiative-hub-epic',
+          version: 1,
+          run_id: null,
+          status: null,
+          token: null,
+          line: 'starts when spec is done',
+          steps: [],
+          files: [],
+        },
+      ],
+    };
+    if (mergeStop) {
+      Object.assign(body, {
+        status: 'waiting for her',
+        step: 'merge',
+        current_step: 'merge',
+        attention: 'blocked',
+      });
+    }
+    if (buildStop) {
+      const agents = ['intake-router', 'product-lead', 'ux-lead', 'tech-lead'];
+      Object.assign(body, {
+        status: 'waiting for her',
+        step: 'build',
+        current_step: null,
+        current_position: 2,
+        attention: 'blocked',
+        reason: 'verify failed: make test exited 2',
+        round: 1,
+        owners: [],
+        runs: [
+          {
+            id: STOPPED_BUILD_RUN,
+            status: 'needs_you',
+            created_at: '2026-11-22T10:00:00Z',
+            position: 2,
+            round: 1,
+            template_name: 'initiative-hub-epic',
+            template_version: 1,
+          },
+        ],
+      });
+      body.workflows[0].steps = ['intake', 'product', 'ux', 'tech'].map((id, i) => ({
+        id,
+        kind: 'conversation',
+        status: 'done',
+        token: 'DON',
+        line: '',
+        number: `1.${i + 1}`,
+        agent: agents[i],
+        turns: [],
+        files: [],
+        files_state: 'open',
+        park_kind: null,
+        reopened_after: null,
+      }));
+      body.workflows[0].status = 'done';
+      body.workflows[0].token = 'DON';
+      Object.assign(body.workflows[1], {
+        run_id: STOPPED_BUILD_RUN,
+        status: 'needs_you',
+        token: 'BLK',
+        line: 'verify failed: make test exited 2',
+      });
+    }
+    if (budgetStop) {
+      Object.assign(body, {
+        status: 'waiting for her',
+        step: 'build',
+        current_step: null,
+        current_position: 2,
+        attention: 'blocked',
+        reason: 'no project budget',
+        project: { id: MIXED_ID, name: 'Familio' },
+        project_id: MIXED_ID,
+      });
+      body.workflows[0].run_id = '0193a000-0000-7000-8000-0000000000c3';
+      body.workflows[0].status = 'done';
+      body.workflows[0].token = 'DON';
+      body.workflows[0].steps = body.workflows[0].steps.map((s) => ({
+        ...s,
+        status: 'done',
+        token: 'DON',
+        park_kind: null,
+      }));
+      body.sessions = [];
+    }
+    send(response, 200, JSON_TYPE, JSON.stringify(body));
+    return;
+  }
+  if (pathname === '/api/v1/initiatives' && request.method === 'POST') {
+    send(
+      response,
+      201,
+      JSON_TYPE,
+      JSON.stringify({ id: '0193a000-0000-7000-8000-0000000000f1', slug: 'new-initiative' }),
+    );
+    return;
+  }
+  const packageMatch = /^\/api\/v1\/projects\/([^/]+)\/package$/.exec(pathname);
+  if (packageMatch && request.method === 'PUT') {
+    const body = await readJsonBody(request);
+    if (!projects[packageMatch[1]]) {
+      send(
+        response,
+        404,
+        'application/problem+json',
+        JSON.stringify({ type: 'about:blank', title: 'Not Found', status: 404 }),
+      );
+      return;
+    }
+    packageOverrides[packageMatch[1]] = {
+      path: body.path,
+      ref: body.ref,
+      repository_id: body.repository_id,
+    };
+    send(response, 200, JSON_TYPE, JSON.stringify({ project_id: packageMatch[1], ...body }));
+    return;
+  }
+  if (packageMatch && request.method === 'DELETE') {
+    if (packageMatch[1] === MIXED_ID) {
+      send(
+        response,
+        409,
+        'application/problem+json',
+        JSON.stringify({
+          type: 'about:blank',
+          title: 'Conflict',
+          status: 409,
+          detail:
+            'refused: 2 open initiatives use this package — familio-dessin-v2, familio-chores-v3',
+        }),
+      );
+      return;
+    }
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  const folderMatch = /^\/api\/v1\/repositories\/([^/]+)\/initiative-folder$/.exec(pathname);
+  if (folderMatch && request.method === 'PUT') {
+    const body = await readJsonBody(request);
+    for (const project of Object.values(projects)) {
+      const repository = project.repositories.find((r) => r.id === folderMatch[1]);
+      if (repository) {
+        repository.initiative_folder = body.initiative_folder;
+        send(response, 200, JSON_TYPE, JSON.stringify(repository));
+        return;
+      }
+    }
+    send(
+      response,
+      404,
+      'application/problem+json',
+      JSON.stringify({ type: 'about:blank', title: 'Not Found', status: 404 }),
+    );
+    return;
+  }
+  if (packageMatch && request.method === 'GET') {
+    if (!projects[packageMatch[1]]) {
+      send(
+        response,
+        404,
+        'application/problem+json',
+        JSON.stringify({ type: 'about:blank', title: 'Not Found', status: 404 }),
+      );
+      return;
+    }
+    const step = (id, kind, persona, writes) => ({
+      file: null,
+      id,
+      kind,
+      persona,
+      skill: null,
+      writes,
+    });
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({
+        gate: {},
+        id: '0193a000-0000-7000-8000-0000000000f2',
+        installed_at: '2026-11-20T10:00:00Z',
+        name: 'stub-package',
+        path: 'package',
+        project_id: packageMatch[1],
+        ref: 'main',
+        ...packageOverrides[packageMatch[1]],
+        repository: {
+          default_branch: 'main',
+          id: '0193a000-0000-7000-8000-0000000000f3',
+          initiative_folder: 'initiatives',
+          slug: 'hub',
+        },
+        repository_id: '0193a000-0000-7000-8000-0000000000f3',
+        sequence: [
+          {
+            shown_as: 'workflow',
+            steps: [
+              step('brief', 'conversation', 'analyst', ['SPEC.md']),
+              step('check', 'automatic', 'reviewer', []),
+            ],
+            template: 'initiative-hub',
+            type: 'interactive',
+            version: 1,
+            workflow: 'spec',
+          },
+          {
+            shown_as: 'step',
+            steps: [step('merge', 'automatic', 'merger', [])],
+            template: 'initiative-hub-merge',
+            type: 'auto',
+            version: 1,
+            workflow: 'merge',
+          },
+          {
+            shown_as: 'workflow',
+            steps: [],
+            template: 'staged-initiative-hub',
+            type: 'auto',
+            version: 4,
+            workflow: 'build',
+          },
+        ],
+        sha: 'abc123',
+        status_map: {},
+      }),
+    );
+    return;
+  }
   if (pathname === '/api/v1/projects' && request.method === 'GET') {
     send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
     return;
@@ -724,6 +1210,61 @@ createServer(async (request, response) => {
   if (pathname === '/api/v1/projects' && request.method === 'POST') {
     const project = createProject(await readJsonBody(request));
     send(response, 201, JSON_TYPE, JSON.stringify(project));
+    return;
+  }
+  if (/^\/api\/v1\/projects\/[^/]+\/initiatives$/.test(pathname) && request.method === 'GET') {
+    // the CLEAN project has nothing in flight: `projects.spec.ts` asserts it paints no signal
+    if (pathname === `/api/v1/projects/${CLEAN_ID}/initiatives`) {
+      send(
+        response,
+        200,
+        JSON_TYPE,
+        JSON.stringify({
+          columns: [],
+          counts: { ongoing: 0, need_you: 0, cancelled: 0, oldest_wait_at: null },
+          items: [],
+        }),
+      );
+      return;
+    }
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({
+        columns: [
+          { workflow: 'spec', type: 'interactive' },
+          { workflow: 'build', type: 'auto' },
+        ],
+        counts: { ongoing: 1, need_you: 1, cancelled: 0, oldest_wait_at: new Date().toISOString() },
+        items: [
+          {
+            attention: 'your_turn',
+            id: '0193a000-0000-7000-8000-000000000001',
+            line: 'ux · your turn · 14 turns',
+            name: 'Initiative steps',
+            position: 1,
+            progress: '1 of 3 steps',
+            project_id: '0193a000-0000-7000-8000-000000000002',
+            project_name: 'Orchestrator',
+            reason: '',
+            repo_tag: ['ai-orchestrator'],
+            repository_id: '0193a000-0000-7000-8000-000000000003',
+            slug: 'initiative-steps',
+            status: 'waiting for her',
+            step: 'ux',
+            updated_at: new Date().toISOString(),
+            workflow: 'spec',
+            workflow_count: 2,
+            workflows: [
+              { workflow: 'spec', type: 'interactive', state: 'ongoing' },
+              { workflow: 'build', type: 'auto', state: null },
+            ],
+          },
+        ],
+        next_cursor: null,
+      }),
+    );
     return;
   }
   const projectMatch = pathname.match(/^\/api\/v1\/projects\/([^/]+)$/);
@@ -737,6 +1278,112 @@ createServer(async (request, response) => {
     const project = updateProject(projectMatch[1], await readJsonBody(request));
     if (!project) return notFound(response, 'no Project has that id');
     send(response, 200, JSON_TYPE, JSON.stringify(project));
+    return;
+  }
+  if (pathname === `/api/v1/runs/${STOPPED_BUILD_RUN}` && request.method === 'GET') {
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({
+        id: STOPPED_BUILD_RUN,
+        status: 'needs_you',
+        spend_usd: '1.00',
+        budget_usd: null,
+        branch: 'feat/familio-dessin-v2',
+        repository: 'familio-web',
+        template: 'initiative-hub-epic',
+        version: 1,
+      }),
+    );
+    return;
+  }
+  const drawerMatch = pathname.match(
+    /^\/api\/v1\/runs\/([^/]+)\/steps\/(\d+)\/attempts\/(\d+)\/drawer$/,
+  );
+  if (drawerMatch && request.method === 'GET') {
+    const seq = Number(drawerMatch[2]);
+    const frame = 'epics[0].stories[0]';
+    const rows = ['sync', 'build', 'verify', 'commit', 'push'].map((label, i) => ({
+      kind: label === 'build' ? 'agent' : 'shell',
+      label,
+      path: `${frame}.${label}`,
+      phase: i < 1 ? 'BEFORE' : i === 1 ? 'AGENT' : 'AFTER',
+      seq: 10 + i,
+      token: 'DON',
+      with_resolved: {},
+    }));
+    const row = rows.find((r) => r.seq === seq) ?? rows[4];
+    const body = {
+      attempts: [{ n: 1, status: 'done' }],
+      files_read: { state: 'not_recorded', paths: [] },
+      files_written: { state: 'refs', commit: null, files: [], refs: ['main aaa1111 → bbb2222'] },
+      header: {
+        cost_usd: null,
+        ended_at: '2026-11-23T10:02:00Z',
+        exit_code: 0,
+        gate: 'deterministic',
+        kind: row.kind,
+        label: row.label,
+        n: 1,
+        path: row.path,
+        seq: row.seq,
+        started_at: '2026-11-23T10:00:00Z',
+        status: 'done',
+        token: 'DON',
+      },
+      log: { attempt_id: 'att-1', reason: null, removed_at: null, state: 'text' },
+      run_order: { frame, rows },
+    };
+    send(response, 200, JSON_TYPE, JSON.stringify(body));
+    return;
+  }
+  if (/^\/api\/v1\/runs\/[^/]+\/files$/.test(pathname) && request.method === 'GET') {
+    const path = new URL(request.url, 'http://stub').searchParams.get('path');
+    if (path) {
+      send(
+        response,
+        200,
+        JSON_TYPE,
+        JSON.stringify({ path, content: '# Design\n', size: 9, mtime: 0 }),
+      );
+      return;
+    }
+  }
+  const filesByEpicMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/files-by-epic$/);
+  if (filesByEpicMatch && request.method === 'GET') {
+    const body = {
+      epics: [
+        {
+          index: 0,
+          title: 'models',
+          folder: 'specs/epic-1-models',
+          files: ['specs/epic-1-models/SPEC.md', 'specs/epic-1-models/stories.yaml'],
+          stories: [
+            {
+              id: '1',
+              title: 'model list',
+              started: true,
+              story_file: 'specs/epic-1-models/stories/1-model-list.md',
+              changed: ['src/models.py', 'tests/test_models.py'],
+            },
+          ],
+        },
+      ],
+    };
+    send(response, 200, JSON_TYPE, JSON.stringify(body));
+    return;
+  }
+  const filesByEpicDiffMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/files-by-epic\/diff$/);
+  if (filesByEpicDiffMatch && request.method === 'GET') {
+    const path = new URL(request.url, 'http://stub').searchParams.get('path') ?? '';
+    const diff = `--- a/${path}\n+++ b/${path}\n-old\n+new\n`;
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({ path, from_sha: 'aaa1111', to_sha: 'bbb2222', diff }),
+    );
     return;
   }
   const exportMatch = pathname.match(/^\/api\/v1\/projects\/([^/]+)\/trajectories\.jsonl$/);

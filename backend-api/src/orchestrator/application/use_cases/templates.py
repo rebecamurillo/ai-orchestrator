@@ -60,7 +60,6 @@ from dataclasses import dataclass
 from orchestrator.application.graph import Graph, build_template_graph
 from orchestrator.application.templates.calls import check_callers
 from orchestrator.application.templates.model import (
-    InputDecl,
     ParsedTemplate,
     Step,
     ValidationError,
@@ -68,9 +67,9 @@ from orchestrator.application.templates.model import (
     all_steps,
 )
 from orchestrator.application.templates.validate import validate
+from orchestrator.application.use_cases.template_detail import TemplateVersionDetail
 from orchestrator.application.use_cases.template_judge import judge_text
 from orchestrator.domain.entities.template import (
-    TemplateCaller,
     TemplateCallRef,
     TemplateRef,
     TemplateSummary,
@@ -101,22 +100,6 @@ class TemplatePorts:
     clock: Clock
     #: `None` = no folder pass: `seed_folder` answers an empty outcome.
     folders: TemplateFolders | None = None
-
-
-@dataclass(frozen=True)
-class TemplateVersionDetail:
-    """The read model `GET /templates/{name}/{version}` renders.
-
-    `pinned_by` defaults to `0` so a fixture built before 4.4 (3.1's own, and this file's
-    `test_template_version_out_of_a_detail_hardcodes_pinned_by_zero`) still constructs one
-    without naming it; `get_version` below is the only caller that fills it with a real
-    count.
-    """
-
-    template: TemplateVersion
-    called_by: tuple[TemplateCaller, ...]
-    inputs: tuple[InputDecl, ...]
-    pinned_by: int = 0
 
 
 @dataclass(frozen=True)
@@ -222,7 +205,11 @@ def get_version(ports: TemplatePorts, name: str, version: int) -> TemplateVersio
     called_by = tuple(ports.templates.callers_of(name, version))
     pinned_by = ports.templates.pinned_by(name, version)
     return TemplateVersionDetail(
-        template=stored, called_by=called_by, inputs=inputs, pinned_by=pinned_by
+        template=stored,
+        called_by=called_by,
+        inputs=inputs,
+        pinned_by=pinned_by,
+        type=result.template.type if result.template is not None else "auto",
     )
 
 

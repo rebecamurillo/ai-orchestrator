@@ -8,12 +8,14 @@ enqueued, sent, cancelled, scheduled, and in which order the launch did its thre
 
 `recv` pops from `messages`, oldest first, and answers `None` once they run out, which is
 exactly what the library does when the deadline passes. That is how the park-and-resume and
-the thirty-day expiry are both driven from a list of dictionaries.
+the thirty-day expiry are both driven from a list of dictionaries. `before_recv`, when given,
+is called with each message about to be returned, so a test can apply the Operator's signal
+exactly when its message is delivered.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -29,8 +31,9 @@ class FakeDurableEngine:
     def __init__(
         self,
         messages: list[Any] | None = None,
-        queued: list[QueuedWorkflow] | None = None,
+        queued: list[QueuedWorkflow] | Mapping[str, list[QueuedWorkflow]] | None = None,
         steps: list[StepRecord] | None = None,
+        before_recv: Callable[[Any], None] | None = None,
     ) -> None:
         self.calls: list[tuple[str, Any]] = []
         self.declared: list[tuple[str, str]] = []
@@ -41,7 +44,10 @@ class FakeDurableEngine:
         self.recvs: list[tuple[str, int]] = []
         self.configured: dict[str, Any] | None = None
         self.messages = list(messages or [])
-        self._queued = list(queued or [])
+        self._before_recv = before_recv
+        # epic 3 story 2, 2026-11-22: queues are keyed by name; a plain list is reported by
+        # every queue, as before.
+        self._queued = queued if isinstance(queued, Mapping) else list(queued or [])
         self._steps = list(steps or [])
         self._step_id = FIRST_STEP_ID
 
@@ -70,7 +76,12 @@ class FakeDurableEngine:
 
     def recv(self, topic: str, timeout_seconds: int) -> Any:
         self.recvs.append((topic, timeout_seconds))
-        return self.messages.pop(0) if self.messages else None
+        if not self.messages:
+            return None
+        message = self.messages.pop(0)
+        if self._before_recv is not None:
+            self._before_recv(message)
+        return message
 
     def cancel(self, workflow_id: str) -> None:
         self.calls.append(("cancel", workflow_id))
@@ -78,6 +89,8 @@ class FakeDurableEngine:
 
     def queued(self, queue: str) -> list[QueuedWorkflow]:
         self.calls.append(("queued", queue))
+        if isinstance(self._queued, Mapping):
+            return list(self._queued.get(queue, []))
         return list(self._queued)
 
     def steps(self, workflow_id: str) -> list[StepRecord]:

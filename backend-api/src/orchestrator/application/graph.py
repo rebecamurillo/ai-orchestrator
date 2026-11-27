@@ -64,14 +64,15 @@ from orchestrator.application.graph_schema import (
 )
 from orchestrator.application.run_graph import (
     ROOT_ID,
-    STEP_TOKENS,
     _run_token,  # noqa: F401 - tests read the Board-token rule through `graph`
     build_run_graph,
     group_status,
 )
+from orchestrator.application.run_order import STEP_TOKENS
 from orchestrator.application.steps import (
     AGENT_KIND,
     CHECKPOINT_KIND,
+    CONVERSATION_KIND,
     KIND_META,
     TEMPLATE_CALL_KIND,
 )
@@ -240,13 +241,14 @@ def _gate_of(step: Step) -> NodeGate | None:
 
 
 def _is_human(step: Step) -> bool:
-    """A person decides this step: it declared the `human` gate, or it is a checkpoint.
+    """A person decides this step: it declared the `human` gate, or it is a checkpoint or a
+    conversation.
 
     A call is neither, whatever it declared: nobody stops at a path segment.
     """
     if step.uses == TEMPLATE_CALL_KIND:
         return False
-    return step.gate == HUMAN_GATE or step.uses == CHECKPOINT_KIND
+    return step.gate == HUMAN_GATE or step.uses in (CHECKPOINT_KIND, CONVERSATION_KIND)
 
 
 def _chain(ids: Sequence[str]) -> tuple[Edge, ...]:

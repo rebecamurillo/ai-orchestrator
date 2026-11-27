@@ -22,6 +22,7 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.domain.ports.engine import EngineRecord, QueueEntry
+from orchestrator.domain.statuses import Lane
 from orchestrator.domain.values import Signal
 from tests.unit.fakes.clock import EPOCH, FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
@@ -42,13 +43,15 @@ class FakeWorkflowEngine:
         self._next_ref = 0
         self.session_turn_error: Exception | None = None
         self.calculation_error: Exception | None = None
+        self.advance_error: Exception | None = None
 
     def _note_commit_state(self) -> None:
         if self._uow is not None:
             self.committed_when_called.append(self._uow.committed)
 
-    def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
-        self.calls.append(("enqueue", (run_id, partition_key)))
+    # epic 3 story 2, 2026-11-22: enqueue takes the lane (AD-6/AD-12 amended)
+    def enqueue(self, run_id: UUID, partition_key: str, lane: Lane) -> dict[str, Any]:
+        self.calls.append(("enqueue", (run_id, partition_key, lane)))
         self._note_commit_state()
         self._next_ref += 1
         self.queue[run_id] = QueueEntry(
@@ -56,6 +59,7 @@ class FakeWorkflowEngine:
             engine_state="enqueued",
             position=len(self.queue) + 1,
             enqueued_at=self._clock.now(),
+            lane=lane,
         )
         return {"ref": self._next_ref}
 
@@ -93,3 +97,10 @@ class FakeWorkflowEngine:
         self._note_commit_state()
         if self.calculation_error is not None:
             raise self.calculation_error
+
+    # epic 8 story 1, 2026-11-25: an initiative advance is its own workflow.
+    def enqueue_advance(self, advance_id: UUID) -> None:
+        self.calls.append(("enqueue_advance", advance_id))
+        self._note_commit_state()
+        if self.advance_error is not None:
+            raise self.advance_error

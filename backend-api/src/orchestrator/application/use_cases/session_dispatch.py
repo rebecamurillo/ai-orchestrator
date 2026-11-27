@@ -12,8 +12,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from orchestrator.application.rules import consult, session
-from orchestrator.application.steps import agent_env, agent_tail, agent_workdir, records
+from orchestrator.application.rules import consult, push_anchors, session
+from orchestrator.application.rules.conversation import STEP_KEY, close_clause
+from orchestrator.application.rules.merge_conflict import unmerged_paths
+from orchestrator.application.steps import (
+    CONVERSATION_KIND,
+    MERGE_KIND,
+    agent_env,
+    agent_tail,
+    agent_workdir,
+    records,
+)
 from orchestrator.application.steps.agent import (
     DEFAULT_STALL_MIN,
     INDEX_LOCK,
@@ -25,6 +34,7 @@ from orchestrator.application.steps.context import (
     committed,
     log_path,
     require_attempt_writes,
+    require_cwd,
     require_harnesses,
     require_process,
     require_run,
@@ -35,17 +45,21 @@ from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY
 from orchestrator.application.templates.rows import STALL_KEY
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.ports.harness import Harness, HarnessHandle
 
 UNKNOWN_HARNESS = "unknown harness {name}"
+NOT_INSTALLED = "skill {name} is not installed on {harness}; name its repository path in with.skill"
 UNDER_LINK = "reply file is under a link"
 SESSION_CLOSED = "session closed"
 #: The folder both turn files live under; `is_link` on it covers `.orchestrator` too.
 REPLY_FOLDER = ".orchestrator/session"
 #: The Run input naming its spec folder, for a parked row that resolved none of its own.
 SPEC_FOLDER_INPUT = "spec_folder"
+SKILL_KEY = "skill"
+PERSONA_KEY = "persona"
 
 
 @dataclass(frozen=True)
@@ -57,6 +71,7 @@ class Turn:
     run: Run
     turns: tuple[Attempt, ...]
     scope: str
+    rows: tuple[StepRun, ...] = ()
 
 
 def record(ctx: StepContext, **fields: Any) -> None:
@@ -88,6 +103,23 @@ def interrupt(ctx: StepContext, reason: str) -> None:
     record(ctx, status="error", output_ref=reason, log_path=str(log_path(ctx)))
 
 
+def session_sweep(ctx: StepContext, message: str) -> tuple[tuple[str, str | None], ...]:
+    """The tree commits of `agent_workdir.sweep`, except on a `git.merge` row while its merge
+    is open: staging an unmerged path marks it resolved with its markers in it, and a commit
+    concludes the merge the executor commits on `continue` and a `retry` aborts (Operator
+    ruling, 2026-11-26)."""
+    env = ctx.ports.run_env
+    initiative = env is not None and push_anchors.initiative_run(env.run)
+    if ctx.row.kind == MERGE_KIND and initiative and _merge_open(ctx):
+        return ()
+    return agent_workdir.sweep(ctx, message)
+
+
+def _merge_open(ctx: StepContext) -> bool:
+    git, tree = ctx.ports.git, require_cwd(ctx)
+    return bool(unmerged_paths(git.status(tree))) or git.merge_in_progress(tree)
+
+
 def dispatch(turn: Turn) -> None:
     """A queued turn, from the sweep to the recorded exit; git's refusal is the turn's."""
     ctx = turn.ctx
@@ -95,9 +127,18 @@ def dispatch(turn: Turn) -> None:
     if harness is None:
         record(ctx, status="error", output_ref=UNKNOWN_HARNESS.format(name=ctx.attempt.harness))
         return
+    ref = _step_ref(turn)
+    if ref is None:
+        skill = session.parked_skill(ctx.row, turn.rows) or ""
+        record(
+            ctx,
+            status="error",
+            output_ref=NOT_INSTALLED.format(name=skill, harness=ctx.attempt.harness),
+        )
+        return
     if session.needs_sweep(turn.turns, ctx.attempt):
         try:
-            records.note_commits(ctx, agent_workdir.sweep(ctx, session.WIP_MESSAGE), "session")
+            records.note_commits(ctx, session_sweep(ctx, session.WIP_MESSAGE), "session")
         except GitError as error:
             record(ctx, status="error", output_ref=git_words(error))
             return
@@ -107,7 +148,7 @@ def dispatch(turn: Turn) -> None:
     if workspace.is_link(REPLY_FOLDER):
         record(ctx, status="error", output_ref=UNDER_LINK)
         return
-    for path in (consult.IGNORE_FILE, session.REPLY_FILE):
+    for path in (consult.IGNORE_FILE, session.REPLY_FILE, session.CLOSE_FILE):
         workspace.remove(path)
     workspace.write(consult.IGNORE_FILE, consult.IGNORE_ALL)
     workspace.write(session.REPLY_FILE, "")
@@ -117,16 +158,16 @@ def dispatch(turn: Turn) -> None:
     committed(ctx, lambda attempts: attempts.mark_started(started))
     tracer = ctx.ports.tracer
     if tracer is None:
-        _run(turn, harness, started, "")
+        _run(turn, harness, started, "", ref)
         return
     with tracer.attempt_span(require_run(ctx), ctx.row, started) as span:
-        _run(turn, harness, started, span.traceparent)
+        _run(turn, harness, started, span.traceparent, ref)
 
 
-def _run(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> None:
+def _run(turn: Turn, harness: Harness, started: Attempt, traceparent: str, ref: str) -> None:
     """Start or resume, commit the group and the session, wait, record the exit (AD-14)."""
     ctx = turn.ctx
-    handle = _start(turn, harness, started, traceparent)
+    handle = _start(turn, harness, started, traceparent, ref)
     running = started.model_copy(
         update={"pgid": handle.pgid, "session_id": handle.session_id or None}
     )
@@ -163,7 +204,9 @@ def _commit_group(ctx: StepContext, running: Attempt) -> bool:
     return run is not None and session.session_open(run)
 
 
-def _start(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> HarnessHandle:
+def _start(
+    turn: Turn, harness: Harness, started: Attempt, traceparent: str, ref: str
+) -> HarnessHandle:
     """The resumed session with the text alone, or a new one opened by the skill's line."""
     ctx = turn.ctx
     tree = agent_workdir.tree(ctx)
@@ -177,11 +220,43 @@ def _start(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> 
         "stall_min": ctx.with_resolved.get(STALL_KEY, DEFAULT_STALL_MIN),
         "add_dirs": agent_env.add_dirs(ctx, tree),
     }
+    text = _harness_text(turn, started)
     resumed = session.resumable(turn.turns, started)
     if resumed is not None:
-        return harness.start_resume(session_id=resumed, message=started.message, **common)
-    prompt = session.opening_line(_facts(turn), started.message)
+        return harness.start_resume(session_id=resumed, message=text, **common)
+    if turn.scope == session.STEP_SCOPE:
+        resolved = ctx.row.with_resolved
+        facts: tuple[str | None, ...] = (resolved.get(STEP_KEY), resolved.get(PERSONA_KEY))
+        prompt = session.opening_line(facts, text, skill=ref)
+    else:
+        prompt = session.opening_line(_facts(turn), started.message)
     return harness.start(prompt=prompt, session_id=str(new_id()), **common)
+
+
+def _harness_text(turn: Turn, started: Attempt) -> str:
+    """The owner's message, and on a conversation step session the row's close instruction
+    after a blank line; the stored message stays the owner's text alone."""
+    row = turn.ctx.row
+    if turn.scope != session.STEP_SCOPE or row.kind != CONVERSATION_KIND:
+        return started.message
+    clause = close_clause(row, started.id)
+    return f"{started.message}\n\n{clause}" if clause else started.message
+
+
+def _step_ref(turn: Turn) -> str | None:
+    """The skill a new step session opens with; resumed turns and other scopes keep the
+    senior's. A catalog that cannot answer, or raises, names the skill as written."""
+    ctx = turn.ctx
+    if turn.scope != session.STEP_SCOPE or session.resumable(turn.turns, ctx.attempt):
+        return session.OPENING_SKILL
+    catalog = ctx.ports.skill_catalog
+    installed = None
+    if catalog is not None:
+        try:
+            installed = catalog.installed_skills(ctx.attempt.harness or "")
+        except Exception:
+            installed = None
+    return session.step_skill_ref(session.parked_skill(ctx.row, turn.rows), installed)
 
 
 def _facts(turn: Turn) -> tuple[str | None, ...]:

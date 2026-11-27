@@ -14,23 +14,33 @@ statements this module records actually run.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 import pytest
-from sqlalchemy import Boolean, DateTime, Text, Uuid
+from sqlalchemy import Boolean, DateTime, Numeric, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 
 from orchestrator.domain.entities.project import EncryptedEnvVar, Project
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.repositories import ProjectRepository
 from orchestrator.infrastructure.db import Base, ProjectRow, SQLAlchemyProjectRepository
+from orchestrator.infrastructure.db.models.run import MONEY
 from orchestrator.infrastructure.db.repositories.projects import env_vars_json, to_entity
 
 AT = datetime(2026, 9, 4, 12, 0, tzinfo=UTC)
 LATER = datetime(2026, 9, 4, 13, 0, tzinfo=UTC)
 
 TABLE = Base.metadata.tables["project"]
+
+RUN_DEFAULT_COLUMNS = (
+    "default_budget_usd",
+    "default_harness",
+    "default_model",
+    "default_autonomy",
+    "default_senior_model",
+)
 
 #: The value a stored token stands in for. Named so an assertion about it can fail.
 PLAINTEXT = "s3cr3t-abcdefgh"
@@ -127,7 +137,8 @@ def test_the_table_carries_exactly_the_columns_the_entity_has() -> None:
         "log_prompt_content",
         "created_at",
         "updated_at",
-    }
+        *RUN_DEFAULT_COLUMNS,
+    }  # revised: story 1 of epic 6 (Project run defaults), 2026-11-22
 
 
 @pytest.mark.parametrize(
@@ -142,6 +153,11 @@ def test_the_table_carries_exactly_the_columns_the_entity_has() -> None:
         ("log_prompt_content", Boolean),
         ("created_at", DateTime),
         ("updated_at", DateTime),
+        ("default_budget_usd", Numeric),
+        ("default_harness", Text),
+        ("default_model", Text),
+        ("default_autonomy", Text),
+        ("default_senior_model", Text),
     ],
 )
 def test_each_column_has_the_type_the_migration_creates(column: str, kind: type) -> None:
@@ -154,10 +170,22 @@ def test_the_timestamps_carry_their_zone() -> None:
         assert TABLE.columns[column].type.timezone is True  # type: ignore[attr-defined]
 
 
-def test_no_column_is_nullable() -> None:
-    """Absent context is an empty string and an empty list, never a null to branch on."""
+def test_the_budget_default_is_money_numeric_12_6_like_the_run_budget() -> None:
+    """Operator ruling, 2026-11-24 (story 1 of epic 6): the default budget takes the shared
+    MONEY type, so a sub-cent budget `BudgetUsd` accepts is stored as sent, never rounded to 0."""
+    column_type = TABLE.columns["default_budget_usd"].type
+    assert (column_type.precision, column_type.scale) == (12, 6)  # type: ignore[attr-defined]
+    assert (column_type.precision, column_type.scale) == (MONEY.precision, MONEY.scale)
+    stored = Decimal("0.004").quantize(Decimal(1).scaleb(-column_type.scale))  # type: ignore[attr-defined]
+    assert stored == Decimal("0.004")
+    assert stored != 0
+
+
+def test_only_the_five_run_defaults_are_nullable() -> None:
+    """Absent context is an empty string and an empty list, never a null to branch on; an unset
+    run default is null (story 1 of epic 6, 2026-11-22)."""
     for column in TABLE.columns:
-        assert column.nullable is False, column.name
+        assert column.nullable is (column.name in RUN_DEFAULT_COLUMNS), column.name
 
 
 def test_the_id_is_the_primary_key() -> None:
@@ -349,3 +377,24 @@ def test_the_id_column_round_trips_a_uuid() -> None:
     project = a_project()
 
     assert isinstance(to_entity(a_row(project)).id, UUID)
+
+
+def test_the_run_defaults_travel_through_add_to_entity_and_update() -> None:
+    values = {
+        "default_budget_usd": Decimal("25.00"),
+        "default_harness": "claude",
+        "default_model": "m",
+        "default_autonomy": "auto",
+        "default_senior_model": "s",
+    }
+    project = a_project(**values)
+    session = RecordingSession()
+    repository(session).add(project)
+    (added,) = session.added
+    assert {name: getattr(added, name) for name in values} == values
+    assert to_entity(added) == project
+
+    stored = a_row(a_project(id=project.id))
+    assert all(getattr(stored, name) is None for name in values)
+    repository(RecordingSession([stored])).update(project)
+    assert {name: getattr(stored, name) for name in values} == values

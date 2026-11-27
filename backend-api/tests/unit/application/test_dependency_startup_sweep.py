@@ -104,7 +104,7 @@ def test_sweep_enqueues_a_fan_in_dependent_once_every_predecessor_is_done() -> N
 
     sweep_dependency_waiting(ports, engine)
 
-    enqueued = [run_id for name, (run_id, _key) in engine.calls if name == "enqueue"]
+    enqueued = [run_id for name, (run_id, _key, _lane) in engine.calls if name == "enqueue"]
     assert enqueued == [dependent.id]
 
 

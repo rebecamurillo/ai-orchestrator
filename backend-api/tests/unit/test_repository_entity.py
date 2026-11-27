@@ -13,11 +13,13 @@ from datetime import UTC, datetime
 import pytest
 
 from orchestrator.domain.entities.repository import (
+    DEFAULT_INITIATIVE_FOLDER,
     DEFAULT_PACKAGE_MANAGER,
     SUGGESTED_TEST_GLOBS,
     CloneCheck,
     Repository,
     dedupe_test_globs,
+    is_valid_folder,
     repo_slug,
 )
 from orchestrator.domain.ids import new_id
@@ -147,3 +149,20 @@ def test_a_repository_is_frozen() -> None:
 def test_the_package_manager_defaults_to_other() -> None:
     assert a_repository().package_manager == "other"
     assert DEFAULT_PACKAGE_MANAGER == "other"
+
+
+def test_a_repository_built_without_a_folder_reads_initiatives() -> None:
+    assert a_repository().initiative_folder == "initiatives"
+    assert DEFAULT_INITIATIVE_FOLDER == "initiatives"
+
+
+@pytest.mark.parametrize("folder", ["initiatives", "specs/initiatives", "a.b/c-d_e"])
+def test_is_valid_folder_accepts(folder: str) -> None:
+    assert is_valid_folder(folder) is True
+
+
+@pytest.mark.parametrize(
+    "folder", ["", "/abs", "a/", "a//b", "a/../b", "a/./b", "..", ".", "a b", "a\n"]
+)
+def test_is_valid_folder_refuses(folder: str) -> None:
+    assert is_valid_folder(folder) is False

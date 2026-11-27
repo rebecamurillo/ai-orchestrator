@@ -7,7 +7,7 @@
  * unexercised by anything but the always-empty case (Review Triage Log, story 3.5, finding 7).
  */
 import type { components } from '../../api/schema';
-import type { CalledByRef, VersionRow } from '../../components/templates/version-row';
+import type { CalledByRef, TemplateType, VersionRow } from '../../components/templates/version-row';
 
 type TemplateSummary = components['schemas']['TemplateSummaryOut'];
 type TemplateCaller = components['schemas']['TemplateCallerOut'];
@@ -18,6 +18,7 @@ export interface BuildVersionRowsArgs {
   summaryItems: TemplateSummary[];
   ownVersions: number[];
   calledByLoaded: TemplateCaller[];
+  ownTypes: ReadonlyMap<number, TemplateType>;
 }
 
 /**
@@ -36,6 +37,7 @@ export function buildVersionRows({
   summaryItems,
   ownVersions,
   calledByLoaded,
+  ownTypes,
 }: BuildVersionRowsArgs): VersionRow[] {
   const byKey = new Map<string, VersionRow>();
   const key = (rowName: string, rowVersion: number) => `${rowName}::${rowVersion}`;
@@ -50,6 +52,7 @@ export function buildVersionRows({
         calledBy: [],
         href: href(item.name, v),
         active: false,
+        type: null,
       });
     }
   }
@@ -62,8 +65,35 @@ export function buildVersionRows({
       calledBy: v === versionNumber ? calledByLoaded.map((ref): CalledByRef => ({ ...ref })) : [],
       href: href(name, v),
       active: v === versionNumber,
+      type: ownTypes.get(v) ?? null,
     });
   }
 
   return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name) || a.version - b.version);
+}
+
+/** Each own version's type: the loaded version from the payload the page holds, the rest read
+ * in parallel through the injected `read`; a rejected or null read leaves that version absent. */
+export async function readVersionTypes({
+  versions,
+  loaded,
+  read,
+}: {
+  versions: number[];
+  loaded: { version: number; type: TemplateType };
+  read: (version: number) => Promise<TemplateType | null>;
+}): Promise<Map<number, TemplateType>> {
+  const types = new Map<number, TemplateType>([[loaded.version, loaded.type]]);
+  const others = [...new Set(versions)].filter((v) => v !== loaded.version);
+  await Promise.all(
+    others.map(async (v) => {
+      try {
+        const type = await read(v);
+        if (type) types.set(v, type);
+      } catch {
+        // best effort: the row prints no type word
+      }
+    }),
+  );
+  return types;
 }

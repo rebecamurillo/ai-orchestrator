@@ -33,6 +33,7 @@ import { api } from '../api/client';
 import type { components } from '../api/schema';
 import FailedFetch from '../components/FailedFetch';
 import OriginDrawer from '../components/metrics/OriginDrawer';
+import StepDrawer from '../components/run/StepDrawer';
 import ArtifactsPanel from '../components/run/ArtifactsPanel';
 import Banner from '../components/run/Banner';
 import CancelModal from '../components/run/CancelModal';
@@ -253,13 +254,27 @@ export default function RunDetail({ runId }: Props) {
     if (seq === null) return;
     setAnchored(seq);
     setActiveTab('steps');
-    const clear = window.setTimeout(() => setAnchored(null), PROMOTED_MS);
-    return () => window.clearTimeout(clear);
   }, [detail]);
 
+  // Its own effect: a poll landing inside PROMOTED_MS re-ran the one above and cleared the
+  // timer, which left the row promoted and re-centred on every resize for good.
+  useEffect(() => {
+    if (anchored === null) return;
+    const clear = window.setTimeout(() => setAnchored(null), PROMOTED_MS);
+    return () => window.clearTimeout(clear);
+  }, [anchored]);
+
+  // Panels above the tabs (files by epic) fill in after the detail and push the row back out
+  // of view, so the row is re-centred on every page resize while it is promoted.
   useEffect(() => {
     if (anchored === null || activeTab !== 'steps') return;
-    document.getElementById(stepAnchorId(anchored))?.scrollIntoView({ block: 'center' });
+    const centre = () =>
+      document.getElementById(stepAnchorId(anchored))?.scrollIntoView({ block: 'center' });
+    centre();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(centre);
+    observer.observe(document.body);
+    return () => observer.disconnect();
   }, [anchored, activeTab]);
 
   // SESSION tab default (story 1-4): set once on the first detail load when terminal is present.
@@ -492,6 +507,7 @@ export default function RunDetail({ runId }: Props) {
           <button
             type="button"
             className="wf-tab-btn"
+            id="wf-steps-heading"
             aria-pressed={activeTab === 'steps'}
             onClick={() => pickTab('steps')}
           >
@@ -549,6 +565,7 @@ export default function RunDetail({ runId }: Props) {
         />
       ) : null}
       <OriginDrawer />
+      <StepDrawer runId={runId} />
     </div>
   );
 }

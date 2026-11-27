@@ -134,6 +134,8 @@ def test_the_version_table_carries_exactly_the_columns_the_entity_needs() -> Non
         "calls",
         "created_at",
         "source",
+        # Story 3 of epic 6, 2026-11-22: a package version carries the commit it was read at.
+        "package_sha",
     }
 
 
@@ -169,7 +171,8 @@ def test_the_description_column_alone_may_be_null() -> None:
         if column.name != "description":
             assert column.nullable is False, column.name
     for column in VERSION_TABLE.columns:
-        assert column.nullable is (column.name == "source"), column.name
+        # Story 3 of epic 6, 2026-11-22: `package_sha` is nullable beside `source`.
+        assert column.nullable is (column.name in ("source", "package_sha")), column.name
 
 
 def test_the_version_table_is_keyed_by_id_and_indexed_on_name_and_version() -> None:

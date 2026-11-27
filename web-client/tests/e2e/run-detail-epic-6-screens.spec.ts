@@ -150,6 +150,25 @@ async function mockFiles(
       body: JSON.stringify(tree),
     });
   });
+  // epic 2 story 1, EXPERIENCE § 12 delta 5, 2026-11-23: the panel reads files-by-epic, not the tree.
+  // Registered last so it wins over the `files*` glob above.
+  await page.route(`**/api/runs/${RUN_ID}/files-by-epic`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        epics: [
+          {
+            index: 0,
+            title: 'gates',
+            folder: 'specs/gates',
+            files: Object.keys(files),
+            stories: [],
+          },
+        ],
+      }),
+    }),
+  );
 }
 
 async function open(page: Page, body: Record<string, unknown>): Promise<void> {
@@ -332,7 +351,7 @@ test.describe('Epic 6 screens', () => {
         run: { branch: 'epics/gates' },
       }),
     );
-    await expect(page.getByTestId('artifacts-tree')).toBeVisible();
+    await expect(page.getByText('FILES · BY EPIC AND STORY')).toBeVisible(); // epic 2 story 1, EXPERIENCE § 12 delta 5, 2026-11-23
 
     await page.getByTestId(`artifacts-file-${SPEC_FILE}`).click();
     await expect(page.getByTestId('wf-file-viewer')).toBeVisible();

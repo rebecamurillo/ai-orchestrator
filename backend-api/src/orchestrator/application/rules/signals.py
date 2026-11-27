@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from orchestrator.application.rules import budget
+from orchestrator.application.rules import budget, session, signals_conversation
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
 from orchestrator.application.rules.signals_table import (
     ACCEPTED,
@@ -54,8 +54,10 @@ __all__ = [
     "BUDGET_KEY",
     "BUDGET_RAISED",
     "BUDGET_TOO_LOW",
+    "CONVERSATION_SESSION_SIGNALS",
     "FILES_KEY",
     "INVALID",
+    "MERGE_SESSION_SIGNALS",
     "NON_TERMINAL",
     "PARKED",
     "REBASELINE_FAILED",
@@ -83,6 +85,17 @@ TERMINAL_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "terminal_release"
 
 #: The only kinds an open senior session admits and offers (AD-23), in `VALID`'s order.
 SENIOR_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "session_end")
+#: What an open session on an initiative Run's `merge_conflict` stop admits: the senior's,
+#: plus the two answers that resume the merge (story 8.4).
+MERGE_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "session_end", "continue", "retry")
+#: What an open session on a `conversation` stop admits: its own end, the step's close, and
+#: the two that stop it (a forced skip, `cancel`) even while its agent answers (AD-23 amended).
+CONVERSATION_SESSION_SIGNALS: tuple[SignalKind, ...] = (
+    "cancel",
+    "session_end",
+    "skip_step",
+    "step_close",
+)
 
 #: What every other kind is refused with while the session holds the Run.
 SENIOR_SESSION_OPEN = "senior session open: end it before {kind}"
@@ -109,7 +122,7 @@ def validate(
     The senior session's lock comes first (AD-23): it holds every caller of `signal_run`,
     the chat reply and `terminal_poll` included, not only the router.
     """
-    if run.senior_session and signal.kind not in SENIOR_SESSION_SIGNALS:
+    if run.senior_session and signal.kind not in _session_signals(run):
         raise Conflict(SENIOR_SESSION_OPEN.format(kind=signal.kind))
     rule = VALID[signal.kind]
     if run.status not in rule.run_statuses:
@@ -127,6 +140,26 @@ def validate(
     return rule
 
 
+def _session_signals(run: Run) -> tuple[SignalKind, ...]:
+    if session.merge_session(run):
+        return MERGE_SESSION_SIGNALS
+    if run.park_kind == signals_conversation.CONVERSATION:
+        return CONVERSATION_SESSION_SIGNALS
+    return SENIOR_SESSION_SIGNALS
+
+
+def _session_offer(run: Run) -> tuple[SignalKind, ...]:
+    if not run.senior_session:
+        return TERMINAL_SESSION_SIGNALS
+    if session.merge_session(run):
+        return MERGE_SESSION_SIGNALS
+    return (
+        ("cancel",)
+        if run.park_kind == signals_conversation.CONVERSATION
+        else SENIOR_SESSION_SIGNALS
+    )
+
+
 def admitted_signals(park_kind: ParkKind, row_kind: str) -> tuple[SignalKind, ...]:
     """The operator actions this stop offers — PRD §4.6's *Signals admitted*, in table order.
 
@@ -134,10 +167,13 @@ def admitted_signals(park_kind: ParkKind, row_kind: str) -> tuple[SignalKind, ..
     that has both. `validate` stays the authority: it also checks the frame a skip needs,
     the budget a raise has to exceed and the terminal session, none of which this knows.
     """
+    if park_kind == signals_conversation.CONVERSATION:
+        return ("cancel",)
     return tuple(
         kind
         for kind, rule in VALID.items()
-        if rule.operator_action
+        if not (kind == "continue" and park_kind == signals_conversation.MERGE_CONFLICT)
+        and rule.operator_action
         and PARKED <= rule.run_statuses
         and park_kind in rule.park_kinds
         and (rule.row_kinds is None or row_kind in rule.row_kinds)
@@ -199,7 +235,7 @@ def run_admitted_signals(
     if run.status in TERMINAL_RUN:
         return ()
     if run.senior_session or run.terminal_session:
-        return SENIOR_SESSION_SIGNALS if run.senior_session else TERMINAL_SESSION_SIGNALS
+        return _session_offer(run)
     if run.status == "queued" and not run.engine_ref:
         return ("start", "cancel")
     if run.status != "needs_you":

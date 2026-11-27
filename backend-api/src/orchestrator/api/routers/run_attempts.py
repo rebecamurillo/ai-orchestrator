@@ -7,8 +7,9 @@ It reuses `Depends(run_view_ports)` — `RunViewPorts` already carries both `att
 and `logs` — so no new provider function is needed in `providers.py`.
 
 `?download=true` streams the full raw file; the default paged form returns a
-`LogPageOut` JSON body addressed by byte offset.  Both answer 200 when the log was
-garbage-collected, never 4xx/5xx for a missing file.
+`LogPageOut` JSON body addressed by byte offset, whose `state` says why a page is empty or
+gone (AD-40).  Both answer 200 when the log was garbage-collected, never 4xx/5xx for a
+missing file.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from orchestrator.api.errors import (
 )
 from orchestrator.api.providers import run_view_ports
 from orchestrator.api.schemas.run_attempts import LogPageOut
+from orchestrator.application.use_cases.attempt_log import read_log_page
 from orchestrator.application.use_cases.run_view_types import RunViewPorts
 
 router = APIRouter(tags=["runs"])
@@ -76,16 +78,12 @@ def log_page(  # noqa: PLR0913, PLR0917
     `text/plain` attachment when `?download=true`.  Both variants answer 200 with a
     human-readable message when the file has been garbage-collected.
     """
-    attempt = ports.attempts.get(attempt_id)
-    if attempt is None or attempt.run_id != run_id:
-        raise Problem(status=HTTP_NOT_FOUND, title="No attempt with that id in this Run.")
-
-    if attempt.log_path is None:
-        if download:
-            return Response(content=b"", media_type=_TEXT_PLAIN)
-        return LogPageOut(lines=[], next_cursor=0, eof=True)
-
     if download:
+        attempt = ports.attempts.get(attempt_id)
+        if attempt is None or attempt.run_id != run_id:
+            raise Problem(status=HTTP_NOT_FOUND, title="No attempt with that id in this Run.")
+        if attempt.log_path is None:
+            return Response(content=b"", media_type=_TEXT_PLAIN)
         raw = ports.logs.read_raw(attempt.log_path)
         if raw is None:
             return Response(content=_GC_MESSAGE, media_type=_TEXT_PLAIN)
@@ -95,8 +93,6 @@ def log_page(  # noqa: PLR0913, PLR0917
             headers={"Content-Disposition": f'attachment; filename="{attempt_id}.log"'},
         )
 
-    result = ports.logs.read_from(attempt.log_path, cursor, limit)
-    if result is None:
-        return LogPageOut(lines=["log no longer on disk"], next_cursor=0, eof=True)
-    lines, next_cursor, eof = result
-    return LogPageOut(lines=lines, next_cursor=next_cursor, eof=eof)
+    return LogPageOut.of(
+        read_log_page(ports.attempts, ports.logs, run_id, attempt_id, cursor=cursor, limit=limit)
+    )

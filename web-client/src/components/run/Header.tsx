@@ -19,8 +19,10 @@ import type { ReactNode } from 'react';
 import type { components } from '../../api/schema';
 import type { RunDetailOut, Token } from '../../lib/run/detail';
 import { crumbText, metaLine, stateAgeSeconds } from '../../lib/run/detail';
-import { ageText, tokenSignal } from '../../lib/board/format';
+import '../../styles/initiatives.css';
+import { ageText, cardTypeText, tokenSignal } from '../../lib/board/format';
 import { runTitle } from '../../lib/run/label';
+import Tag from '../initiatives/Tag';
 import RunTitle from './RunTitle';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
@@ -50,6 +52,17 @@ export default function Header({ detail, token, now, onSaveLabel, actions }: Pro
           byOperator={detail.run.label_set_by_operator ?? false}
           onSave={onSaveLabel ?? NO_SAVE}
         />
+        <span className="wf-template-type" data-testid="wf-template-type">
+          {cardTypeText(detail.template_type, detail.header.meta.harness)}
+        </span>
+        {detail.initiative ? (
+          <Tag
+            label="initiative"
+            value={`${detail.initiative.slug} · workflow ${detail.initiative.position} of ${detail.initiative.workflow_count}`}
+            href={`/initiatives/${detail.initiative.id}`}
+            testId="wf-initiative-tag"
+          />
+        ) : null}
         <span className="wf-age">{ageText(stateAgeSeconds(detail, now))}</span>
       </div>
       <p className="wf-meta" data-testid="wf-meta">

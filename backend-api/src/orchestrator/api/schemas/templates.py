@@ -12,7 +12,7 @@ happens, once, for both routes that need it.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -171,6 +171,15 @@ class TemplateVersionOut(BaseModel):
     ]
     created_at: UtcTimestamp | None
     inputs: list[InputDeclOut]
+    type: Annotated[
+        Literal["interactive", "auto"],
+        Field(
+            description=(
+                "`interactive`: a workflow of conversation steps on its own lane; "
+                "`auto`: every other workflow (AD-15)"
+            )
+        ),
+    ]
     in_folder: Annotated[
         bool | None,
         Field(
@@ -192,6 +201,7 @@ class TemplateVersionOut(BaseModel):
             pinned_by=detail.pinned_by,
             created_at=detail.template.created_at,
             inputs=[InputDeclOut.of(decl) for decl in detail.inputs],
+            type=detail.type,
             in_folder=in_folder,
         )
 

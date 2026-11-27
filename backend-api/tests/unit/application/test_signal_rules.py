@@ -304,7 +304,9 @@ def test_an_infinite_budget_is_refused_rather_than_accepted_as_unbounded() -> No
 def test_a_skip_step_is_admitted_on_every_non_dependency_park_kind() -> None:
     """AD-13, ratified 2026-09-25: park_kinds=ANY_PARK (story 1)."""
     # story 2-1, 2026-11-02: a "paused" stop admits continue and cancel only (AD-13).
-    non_dep = [pk for pk in PARK_KINDS if pk not in ("dependency", "paused")]
+    # story 1 (epic 4 conversation stop), 2026-11-22: a conversation stop offers only cancel;
+    # the new behaviour is asserted in test_conversation_signals.py.
+    non_dep = [pk for pk in PARK_KINDS if pk not in ("dependency", "paused", "conversation")]
     for park_kind in non_dep:
         assert "skip_step" in admitted_signals(park_kind, "agent"), (
             f"expected skip_step for {park_kind}"

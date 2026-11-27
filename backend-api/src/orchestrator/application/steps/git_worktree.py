@@ -65,6 +65,7 @@ from orchestrator.application.steps.context import (
     require_workspace,
 )
 from orchestrator.application.steps.registry import register
+from orchestrator.application.steps.step_log import logged
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.values import Park, RunUpdates, StepResult, Worktree
 
@@ -109,32 +110,34 @@ class GitWorktreeExecutor:
     """Ensure the base clone, then the worktree — the install is the template's own row."""
 
     def execute(self, ctx: StepContext) -> StepResult:
-        env = require_env(ctx)
-        # AD-14 backstop: a race between pre-flight passing and this row executing may have
-        # put another Run on the same (repository, branch) partition (story 5-1). Refuse
-        # rather than clobbering the other Run's worktree.
-        if env.held_by_label is not None:
-            reason = HELD_BY.format(run=env.held_by_label)
-            return StepResult(
-                status="error",
-                gate=ctx.row.gate,
-                reason=reason,
-                park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
-            )
-        branch = str(ctx.with_resolved[BRANCH_KEY])
-        base = str(ctx.with_resolved[BASE_KEY])
-        attached = ctx.with_resolved.get(WORKTREE_MODE_KEY) == ATTACH_MODE
-        worktree = env.worktree_dir(ctx.ports.work_dir, branch)
-        ensured = _ensure_base(ctx, env, branch if attached else base)
-        if ensured is not None:
-            return ensured
-        opened = _open_worktree(ctx, env, branch=branch, base=base)
-        if isinstance(opened, StepResult):
-            return opened
-        updates = _run_updates(env, worktree, branch, created_branch=opened.created_branch)
+        return logged(ctx, lambda inner, _recorder: _worktree(inner))
+
+
+def _worktree(ctx: StepContext) -> StepResult:
+    env = require_env(ctx)
+    # AD-14 backstop: a race between pre-flight passing and this row executing may have
+    # put another Run on the same (repository, branch) partition (story 5-1). Refuse
+    # rather than clobbering the other Run's worktree.
+    if env.held_by_label is not None:
+        reason = HELD_BY.format(run=env.held_by_label)
         return StepResult(
-            status="done", gate=ctx.row.gate, reason=opened.reason, run_updates=updates
+            status="error",
+            gate=ctx.row.gate,
+            reason=reason,
+            park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
         )
+    branch = str(ctx.with_resolved[BRANCH_KEY])
+    base = str(ctx.with_resolved[BASE_KEY])
+    attached = ctx.with_resolved.get(WORKTREE_MODE_KEY) == ATTACH_MODE
+    worktree = env.worktree_dir(ctx.ports.work_dir, branch)
+    ensured = _ensure_base(ctx, env, branch if attached else base)
+    if ensured is not None:
+        return ensured
+    opened = _open_worktree(ctx, env, branch=branch, base=base)
+    if isinstance(opened, StepResult):
+        return opened
+    updates = _run_updates(env, worktree, branch, created_branch=opened.created_branch)
+    return StepResult(status="done", gate=ctx.row.gate, reason=opened.reason, run_updates=updates)
 
 
 def _ensure_base(ctx: StepContext, env: RunEnvironment, branch: str) -> StepResult | None:

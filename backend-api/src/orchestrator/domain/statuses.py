@@ -32,6 +32,11 @@ from typing import Literal, get_args
 RunStatus = Literal["queued", "running", "needs_you", "done", "failed", "cancelled"]
 RUN_STATUSES: tuple[RunStatus, ...] = get_args(RunStatus)
 
+#: Which engine queue a Run waits in (AD-6, AD-12): `walk` holds `MAX_ACTIVE_RUNS` slots,
+#: `interactive` holds `MAX_INTERACTIVE_RUNS` slots for conversation workflows.
+Lane = Literal["walk", "interactive"]
+LANES: tuple[Lane, ...] = get_args(Lane)
+
 #: What a `step_run.status` — and the `attempt.status` that reached it — can be.
 StepStatus = Literal[
     "planned", "queued", "running", "done", "blocked", "checkpoint", "error", "skipped"
@@ -62,11 +67,14 @@ ParkKind = Literal[
     #: The Operator asked for a pause and the row then executing has ended (AD-13 `pause`,
     #: 2026-11-01 amendment). Admits `continue` and `cancel`; nothing was killed.
     "paused",
+    #: A conversation step waiting for the Operator (AD-13 amended, 2026-11-22). The row is
+    #: `checkpoint`; only `step_close`, a forced `skip_step` and `cancel` end it.
+    "conversation",
 ]
 PARK_KINDS: tuple[ParkKind, ...] = get_args(ParkKind)
 
 #: The stops whose Run renders the `CHK` token; every other stop renders `BLK`.
-CHK_PARK_KINDS: frozenset[ParkKind] = frozenset({"checkpoint", "paused"})
+CHK_PARK_KINDS: frozenset[ParkKind] = frozenset({"checkpoint", "paused", "conversation"})
 
 #: What the Operator can send a parked Run (AD-13). `signal_run` owns every one of them.
 SignalKind = Literal[
@@ -85,6 +93,7 @@ SignalKind = Literal[
     "pause",
     "session_start",
     "session_end",
+    "step_close",
 ]
 SIGNAL_KINDS: tuple[SignalKind, ...] = get_args(SignalKind)
 
@@ -114,7 +123,14 @@ LIFECYCLE_EVENTS: tuple[LifecycleEvent, ...] = get_args(LifecycleEvent)
 #: AD-17). Not `continue`: that is the Operator's signal, and `signal_run` is its one writer
 #: (AD-8). `expired` is not here: AD-13 applies the 30-day `recv` expiry as Run `failed`,
 #: which is a lifecycle event the Run already has.
-MachineEvent = Literal["redispatch", "retry_auto", "consult", "senior_answer", "senior_accept"]
+MachineEvent = Literal[
+    "redispatch",
+    "retry_auto",
+    "consult",
+    "senior_answer",
+    "senior_accept",
+    "close_discarded",
+]
 MACHINE_EVENTS: tuple[MachineEvent, ...] = get_args(MachineEvent)
 
 #: AD-8's own three alphabets, concatenated: what a `gate_record.event` carries for a Run
@@ -158,6 +174,7 @@ RunEvent = Literal[
     "skip_epic",
     "budget_raise",
     "terminal_resume",
+    "step_close",
     "expire",
     "finish",
     "fail",
@@ -214,6 +231,7 @@ RUN_TRANSITIONS: dict[tuple[RunStatus, RunEvent], RunStatus] = {
     ("needs_you", "skip_epic"): "running",
     ("needs_you", "budget_raise"): "running",
     ("needs_you", "terminal_resume"): "running",
+    ("needs_you", "step_close"): "running",
     ("needs_you", "expire"): "failed",
     ("needs_you", "cancel"): "cancelled",
 }
@@ -230,6 +248,8 @@ STEP_TRANSITIONS: dict[tuple[StepStatus, StepEvent], StepStatus] = {
     ("running", "blocked"): "blocked",
     ("running", "checkpoint"): "checkpoint",
     ("running", "error"): "error",
+    # An executor may end its own row `skipped` (AD-15 amended "The round"; Operator 2026-11-23).
+    ("running", "skip"): "skipped",
     ("done", "redispatch"): "queued",
     ("blocked", "answer"): "queued",
     ("blocked", "terminal_resume"): "done",

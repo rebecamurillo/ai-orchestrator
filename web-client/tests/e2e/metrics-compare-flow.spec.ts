@@ -427,14 +427,17 @@ const columns = (page: Page) => page.getByTestId(/^compare-col-/);
 // ---------------------------------------------------------------- tests
 
 test.describe('/metrics — rail, Runs table, selection and spend (epic 4 story 2)', () => {
-  test('the rail reads Workflows, Runs, Metrics, then CONFIGURE Projects, Templates', async ({
+  test('the rail reads Initiatives, Workflows, Runs, Metrics, then CONFIGURE Projects, Templates', async ({
     page,
   }) => {
     await mockBackend(page);
     await page.goto('/metrics');
 
     const rail = page.getByRole('navigation', { name: 'Surfaces' });
+    // Initiatives is the first rail item: initiative orchestrator-initiative-steps, epic 10
+    // story 1 (2026-11-22); this file was missing from that story's may-change list.
     await expect(rail.getByRole('link')).toHaveText([
+      /^Initiatives/,
       /^Workflows/,
       /^Runs/,
       /^Metrics/,

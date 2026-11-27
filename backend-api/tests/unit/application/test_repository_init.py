@@ -164,7 +164,10 @@ def test_a_missing_method_and_a_passing_clone_check_starts_repo_init() -> None:
     assert stored.inputs["harness"] is not None  # `create_run`'s own default, never asked for
     # operator revision 2026-09-15: partition by (repository, branch)
     assert harness.engine.calls == [
-        ("enqueue", (result.run.id, f"{fixtures.REPOSITORY.id}:{fixtures.INIT_BRANCH}"))
+        (
+            "enqueue",
+            (result.run.id, f"{fixtures.REPOSITORY.id}:{fixtures.INIT_BRANCH}", "walk"),
+        )  # epic 3 story 2, 2026-11-22: enqueue takes the lane (AD-6/AD-12 amended)
     ]
 
 

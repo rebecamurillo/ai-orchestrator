@@ -53,6 +53,9 @@ from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyTrajectoryRepository,
 )
 from orchestrator.infrastructure.db.repositories.analysis import SQLAlchemyAnalysisRepository
+from orchestrator.infrastructure.db.repositories.initiatives import (
+    SQLAlchemyInitiativeAdvanceRepository,
+)
 from orchestrator.infrastructure.db.repositories.run_records import (
     SQLAlchemyRunCommitRepository,
     SQLAlchemyRunRepositoryRecords,
@@ -139,6 +142,7 @@ def open_writer_ports(
             run_repositories=SQLAlchemyRunRepositoryRecords(session),
             calculations=SQLAlchemyMetricCalculationRepository(session),
             versions=SQLAlchemyResultVersionRepository(session),
+            advances=SQLAlchemyInitiativeAdvanceRepository(session),
         )
     finally:
         session.close()

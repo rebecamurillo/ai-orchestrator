@@ -24,6 +24,7 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict
 
 from orchestrator.application.steps import Gate, KindMeta
+from orchestrator.application.templates.conversation_model import ConversationExtras
 from orchestrator.application.templates.step_metric_model import StepMetric
 
 #: The declared type of a Template input (brief, key table "input").
@@ -32,6 +33,7 @@ InputType = Literal["project", "repository", "string", "path", "enum", "number",
 #: What a step does when it fails, in its plain form. The `{redispatch, max}` form is two
 #: fields on `Step`, because a two-key mapping is not a third action.
 OnFailAction = Literal["escalate", "fail", "continue"]
+TemplateType = Literal["interactive", "auto"]
 
 #: What a Template may write as a scalar: an input default, or one call binding.
 Scalar = str | int | float | bool
@@ -298,6 +300,9 @@ class Step(BaseModel):
     redispatch_consult: ConsultDecl | None = None
     agent: AgentExtras | None = None
     call: TemplateCall | None = None
+    conversation: ConversationExtras | None = None
+    #: A `git.push` row's declared `retry {max, sync_first}`, as plain values.
+    push_retry: dict[str, Any] | None = None
 
 
 class ForEach(BaseModel):
@@ -332,6 +337,7 @@ class ParsedTemplate(BaseModel):
     inputs: tuple[InputDecl, ...] = ()
     steps: tuple[Step | ForEach, ...] = ()
     metrics: tuple[StepMetric, ...] = ()
+    type: TemplateType = "auto"
 
 
 # --- the result --------------------------------------------------------------------------

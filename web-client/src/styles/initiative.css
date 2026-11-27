@@ -1,0 +1,494 @@
+/* The Initiative page (story 11.1). Classes are `ini-` prefixed and distinct from initiatives.css. */
+.ini-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.ini-crumb,
+.ini-meta,
+.ini-position {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.ini-crumb a {
+  color: var(--color-accent);
+}
+
+.ini-header-main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.ini-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-detail-title);
+}
+
+.ini-state {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+}
+
+.ini-position {
+  margin-left: auto;
+}
+
+.ini-header-tags {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.ini-section-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-section-head);
+  letter-spacing: var(--type-column-head-tracking);
+}
+
+.ini-track-cells {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.ini-track-sep {
+  align-self: center;
+  color: var(--color-text-tertiary);
+}
+
+.ini-wcell,
+.ini-scell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-left: 2px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ini-wcell {
+  flex: 1;
+}
+
+.ini-wcell[data-left-rule='needs-you'],
+.ini-scell[data-left-rule='needs-you'] {
+  border-left-color: var(--color-signal-needs-you);
+}
+
+.ini-wcell[data-selected='true'],
+.ini-scell[data-selected='true'] {
+  border-bottom: 2px solid var(--color-accent);
+}
+
+.ini-wcell-eyebrow,
+.ini-scell-eyebrow {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-eyebrow);
+}
+
+.ini-now {
+  color: var(--color-accent);
+}
+
+.ini-wcell-name {
+  font-size: var(--type-body);
+}
+
+.ini-wcell-micro,
+.ini-scell-agent {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+}
+
+.ini-wcell-line,
+.ini-scell-line {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}
+
+.ini-scell-line[data-to-come='true'] {
+  color: var(--color-text-tertiary);
+}
+
+.ini-wcell-line[data-signal='needs-you'],
+.ini-scell-line[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.ini-strip-list {
+  display: flex;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ini-strip-list li {
+  flex: 1;
+}
+
+.ini-strip-list .ini-scell {
+  width: 100%;
+  height: 100%;
+}
+
+.ini-scell s {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+}
+
+.ini-body {
+  display: grid;
+  grid-template-columns: minmax(0, 940px) 330px;
+  gap: var(--space-5);
+}
+
+.ini-main {
+  min-width: 0;
+}
+
+.ini-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ini-summary p {
+  margin: 0;
+}
+
+.ini-summary-note {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.ini-turns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ini-turn {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.ini-turn p {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: 1.7;
+}
+
+.ini-turn-eyebrow {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.ini-turn-operator {
+  color: var(--color-text-secondary);
+}
+
+.ini-turn-agent {
+  color: var(--color-text);
+}
+
+.ini-sysline {
+  margin: var(--space-3) 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.ini-sysline[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.ini-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.ini-composer textarea {
+  width: 100%;
+}
+
+.ini-composer button {
+  align-self: flex-start;
+}
+
+.ini-hint {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.ini-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.ini-files-wf-name {
+  margin: var(--space-3) 0 var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}
+
+.ini-files-group {
+  padding: var(--space-2);
+}
+
+.ini-files-group[data-selected='true'] {
+  background: var(--color-surface-raised);
+}
+
+.ini-files-group-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.ini-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin: var(--space-1) 0 0;
+  padding: 0 0 0 var(--space-3);
+  border: 0;
+  border-left: 1px solid var(--color-line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.ini-file {
+  cursor: pointer;
+}
+
+.ini-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ini-file-time {
+  color: var(--color-text-tertiary);
+}
+
+.ini-file-chip {
+  width: 7px;
+  height: 7px;
+  background: var(--color-accent);
+}
+
+.ini-files-none,
+.ini-files-all {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.ini-link {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.ini-link-workflow {
+  color: var(--color-text-secondary);
+}
+
+.ini-scell-item {
+  position: relative;
+}
+
+.ini-scell-action {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.ini-plane {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ini-plane-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--color-surface-inset);
+  opacity: 0.82;
+}
+
+.ini-plane-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 520px;
+  padding: var(--space-5);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-text);
+}
+
+.ini-plane-panel p,
+.ini-plane-panel ul {
+  margin: 0;
+}
+
+.ini-plane-head {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+}
+
+.ini-plane-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.ini-actions button,
+.ini-plane-actions button,
+.ini-scell-action {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-text-secondary);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.ini-actions button,
+.ini-plane-actions button {
+  font-size: var(--type-control);
+}
+
+.ini-actions button.primary,
+.ini-plane-actions button.primary {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.ini-actions button.danger,
+.ini-plane-actions button.danger {
+  border-color: var(--color-signal-failed);
+  color: var(--color-signal-failed);
+}
+
+.ini-plane-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ini-stop {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border-left: 2px solid var(--color-signal-needs-you);
+}
+
+.ini-stop[data-signal='failed'] {
+  border-left-color: var(--color-signal-failed);
+}
+
+.ini-stop-head {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.ini-stop-body {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.ini-stop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.ini-stop-actions button {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-text-secondary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.ini-stop-actions button.primary {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.ini-stop-actions button.danger {
+  border-color: var(--color-signal-failed);
+  color: var(--color-signal-failed);
+}
+
+.ini-stop-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ini-stop input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-line-strong);
+  font-family: var(--font-mono);
+}
+
+.ini-sysline[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.ini-defects {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border-left: 2px solid var(--color-signal-needs-you);
+}
+
+.ini-defects-eyebrow {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  letter-spacing: var(--type-control-tracking);
+}
+
+.ini-defects-text {
+  margin: var(--space-2) 0 0;
+  white-space: pre-wrap;
+}

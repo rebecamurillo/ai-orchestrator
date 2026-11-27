@@ -124,3 +124,27 @@ describe('ArtifactModal', () => {
     expect(html).not.toContain('congratulations');
   });
 });
+
+/** Story 11.3 (2026-11-22): no Run → the file is read-only (EXPERIENCE I3 "Right column"). */
+describe('ArtifactModal with run null', () => {
+  const renderNull = (path: string): string =>
+    renderToStaticMarkup(
+      createElement(ArtifactModal, {
+        runId: 'r1',
+        path,
+        run: null,
+        folder: FOLDER,
+        onClose: () => {},
+      }),
+    );
+
+  it.each([`${FOLDER}/SPEC.md`, `${FOLDER}/stories.yaml`])('renders %s read-only', (path) => {
+    const html = renderNull(path);
+    expect(html).toContain('data-testid="wf-artifact-modal"');
+    expect(html).toContain('data-testid="wf-artifact-modal-tab-rendered"');
+    expect(html).toContain('data-testid="wf-artifact-modal-tab-source"');
+    expect(html).toContain('data-testid="wf-artifact-modal-tab-raw"');
+    expect(html).not.toContain('data-testid="wf-artifacts-edit"');
+    expect(html).not.toContain('data-testid="artifacts-readonly"');
+  });
+});

@@ -24,6 +24,7 @@ import re
 
 from orchestrator.application.steps.context import StepContext, require_env
 from orchestrator.application.steps.registry import register
+from orchestrator.application.steps.step_log import write_step_log
 from orchestrator.domain.values import RunUpdates, StepResult
 
 #: The kind this module implements (AD-9: named here, beside the executor, or nowhere).
@@ -51,9 +52,15 @@ class PrLinkExecutor:
     def execute(self, ctx: StepContext) -> StepResult:
         env = require_env(ctx)
         branch = str(ctx.with_resolved[BRANCH_KEY])
+        header = f"> compare link from {env.repository_url}"
         matched = GITHUB_URL.match(env.repository_url)
         if matched is None:
-            return StepResult(status="done", gate=ctx.row.gate, reason=NO_LINK)
+            return StepResult(
+                status="done",
+                gate=ctx.row.gate,
+                reason=NO_LINK,
+                log_path=write_step_log(ctx, [header, f"  {NO_LINK}"]),
+            )
         url = COMPARE_URL.format(
             owner=matched["owner"],
             repo=matched["repo"],
@@ -66,6 +73,7 @@ class PrLinkExecutor:
             gate=ctx.row.gate,
             output_ref=url,
             run_updates=RunUpdates(compare_urls=recorded),
+            log_path=write_step_log(ctx, [header, f"  {url}"]),
         )
 
 

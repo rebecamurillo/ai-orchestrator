@@ -28,6 +28,8 @@ interface Props {
   workflows?: number;
   runs?: number;
   needsYou?: number;
+  initiatives?: number;
+  initiativesNeedYou?: number;
   running?: number;
   queued?: number;
   updated?: string;
@@ -40,6 +42,8 @@ const {
   workflows = 0,
   runs = 0,
   needsYou = 0,
+  initiatives = 0,
+  initiativesNeedYou = 0,
   running = 0,
   queued = 0,
   updated = '—',
@@ -54,7 +58,14 @@ const {
   </head>
   <body>
     <div class="shell">
-      <AppRail active={active} workflows={workflows} runs={runs} needsYou={needsYou} />
+      <AppRail
+        active={active}
+        workflows={workflows}
+        runs={runs}
+        needsYou={needsYou}
+        initiatives={initiatives}
+        initiativesNeedYou={initiativesNeedYou}
+      />
       <div class="surface">
         <SurfaceBar title={title} count={count}>
           <slot name="filters" slot="filters" />

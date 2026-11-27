@@ -277,7 +277,8 @@ export default function StepDetail({ runId, dotPath }: Props) {
                   runId={runId}
                   attemptId={selectedAttempt.id}
                   isRunning={selectedAttempt.status === 'running'}
-                  logPath={null}
+                  exitCode={selectedAttempt.exit_code}
+                  seconds={selectedAttempt.seconds}
                 />
               </div>
             </div>

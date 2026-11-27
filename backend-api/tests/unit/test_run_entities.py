@@ -256,6 +256,7 @@ def test_a_new_attempt_has_no_log_no_exit_code_and_no_output() -> None:
     attempt = an_attempt()
 
     assert attempt.log_path is None
+    assert attempt.log_removed_at is None
     assert attempt.exit_code is None
     assert attempt.output_ref is None
     assert attempt.engine_ref == {}

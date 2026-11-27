@@ -5,9 +5,9 @@
  * "own versions pass wins over the cross-Template summary pass for the same key" precedence
  * rule was otherwise unexercised (Review Triage Log, story 3.5, finding 7).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { buildVersionRows } from '../../src/lib/templates/version-rows';
+import { buildVersionRows, readVersionTypes } from '../../src/lib/templates/version-rows';
 
 describe('buildVersionRows', () => {
   it('lets the own-versions pass win over the cross-Template summary for the same name::version', () => {
@@ -23,6 +23,7 @@ describe('buildVersionRows', () => {
       ],
       ownVersions: [1],
       calledByLoaded: [{ name: 'helper', version: 1, pinned: true }],
+      ownTypes: new Map(),
     });
 
     const demoRow = rows.find((row) => row.name === 'demo' && row.version === 1)!;
@@ -42,6 +43,7 @@ describe('buildVersionRows', () => {
       summaryItems: [],
       ownVersions: [1], // a versions-list read that somehow missed the version being rendered
       calledByLoaded: [],
+      ownTypes: new Map(),
     });
 
     const loadedRow = rows.find((row) => row.name === 'demo' && row.version === 2);
@@ -56,6 +58,7 @@ describe('buildVersionRows', () => {
       summaryItems: [{ name: 'epic', description: null, latest_version: 1, versions: [1] }],
       ownVersions: [2, 1],
       calledByLoaded: [],
+      ownTypes: new Map(),
     });
 
     expect(rows.map((row) => `${row.name}@${row.version}`)).toEqual([
@@ -72,8 +75,67 @@ describe('buildVersionRows', () => {
       summaryItems: [],
       ownVersions: [1],
       calledByLoaded: [],
+      ownTypes: new Map(),
     });
 
     expect(rows[0]!.href).toBe('/templates/weird%20name/1');
+  });
+});
+
+// Story 10.4, Operator ruling 2026-11-26: VersionRow.type.
+describe('version row type', () => {
+  const base = {
+    name: 'demo',
+    versionNumber: 1,
+    summaryItems: [{ name: 'helper', description: null, latest_version: 1, versions: [1] }],
+    ownVersions: [1, 2, 3],
+    calledByLoaded: [],
+  };
+
+  it('takes own types from ownTypes, null when absent or for another Template', () => {
+    const rows = buildVersionRows({
+      ...base,
+      ownTypes: new Map<number, 'interactive' | 'auto'>([
+        [1, 'interactive'],
+        [3, 'auto'],
+      ]),
+    });
+    const type = (n: string, v: number) => rows.find((r) => r.name === n && r.version === v)!.type;
+    expect(type('demo', 1)).toBe('interactive');
+    expect(type('demo', 2)).toBeNull();
+    expect(type('demo', 3)).toBe('auto');
+    expect(type('helper', 1)).toBeNull();
+  });
+});
+
+describe('readVersionTypes', () => {
+  it('leaves rejected and null reads absent and never reads the loaded version', async () => {
+    const read = vi.fn(async (v: number) => {
+      if (v === 2) throw new Error('boom');
+      if (v === 3) return null;
+      return v === 4 ? ('auto' as const) : ('interactive' as const);
+    });
+    const map = await readVersionTypes({
+      versions: [1, 2, 3, 4],
+      loaded: { version: 1, type: 'interactive' },
+      read,
+    });
+    expect(map.get(1)).toBe('interactive');
+    expect(map.has(2)).toBe(false);
+    expect(map.has(3)).toBe(false);
+    expect(map.get(4)).toBe('auto');
+    expect(read).not.toHaveBeenCalledWith(1);
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns the loaded version alone for an empty list', async () => {
+    const read = vi.fn();
+    const map = await readVersionTypes({
+      versions: [],
+      loaded: { version: 5, type: 'auto' },
+      read,
+    });
+    expect([...map]).toEqual([[5, 'auto']]);
+    expect(read).not.toHaveBeenCalled();
   });
 });

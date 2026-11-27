@@ -11,6 +11,8 @@ is a rule, and rules live in `application/`. The four writes and reads below are
 - **`add_version`** stores a version that does not exist yet (AD-15: no update, no delete).
   `description` is the parent `template` row's column, not a `TemplateVersion` field — it is
   denormalised there so `list()` never re-parses every version's YAML to answer one list.
+- **`get_by_package_sha`** answers the version a package install already stored for one
+  commit, so a re-install at the same commit stores nothing (AD-39).
 - **`list`** answers `GET /templates`: one `TemplateSummary` per stored name.
 - **`list_versions`** answers the version numbers stored under one name, ascending — both
   `GET /templates/{name}/versions` and `save_version`'s "next version" arithmetic read it.
@@ -53,6 +55,10 @@ class TemplateVersionRepository(Protocol):
 
     def names_with_source(self, source: str) -> frozenset[str]:
         """Every Template name holding at least one version stored with this `source`."""
+        ...
+
+    def get_by_package_sha(self, name: str, sha: str) -> TemplateVersion | None:
+        """The version of this name stored for this package commit, or `None`."""
         ...
 
     # Defined last: mypy resolves a bare `list[...]` written *after* this point in the class

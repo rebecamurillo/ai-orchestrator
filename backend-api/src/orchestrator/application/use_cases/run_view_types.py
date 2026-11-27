@@ -15,6 +15,9 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from orchestrator.application.rules.attention import Attention
+from orchestrator.application.steps.context import WorkspaceFactory
+from orchestrator.application.use_cases.initiative_view_types import InitiativeTag
 from orchestrator.application.use_cases.terminal import Terminal, TerminalPorts
 from orchestrator.domain.entities.chat_thread import ChatThreadState
 from orchestrator.domain.entities.gate_record import GateRecord
@@ -22,6 +25,7 @@ from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.chat import ChatProvider
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.initiatives import InitiativeRepository
 from orchestrator.domain.ports.logs import LogReader
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
@@ -32,6 +36,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.templates import TemplateVersionRepository
 from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.statuses import ParkKind, RunStatus, SignalKind
 
@@ -66,6 +71,10 @@ class RunViewPorts:
     harness_is_resumable: Callable[[str], bool] | None = None
     #: `None` degrades to `alert.chat_thread = None` (story 3-3).
     chat_threads: ChatThreadRepository | None = None
+    #: `None` degrades to no `initiative` and no `template_type` on the detail.
+    initiatives: InitiativeRepository | None = None
+    templates: TemplateVersionRepository | None = None
+    workspace: WorkspaceFactory | None = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +113,9 @@ class Card:
     needs_you_since: datetime | None
     label: str = ""
     label_set_by_operator: bool = False
+    initiative: InitiativeTag | None = None
+    attention: Attention | None = None
+    template_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -237,6 +249,7 @@ class StepRowView:
     #: The resolved retry prompt from `with_resolved["retry"]["prompt"]` (story 3-5).
     #: `None` when the step has no retry block or the prompt key is absent.
     retry_prompt: str | None = None
+    attempt_ns: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -297,3 +310,5 @@ class RunDetailView:
     #: recorded), `"no_capability"` (session recorded but harness cannot resume), or `None`
     #: when `reply_available=True` or `harness_is_resumable` is not wired (story 4, 2026-09-25).
     resume_unavailable_reason: str | None = None
+    initiative: InitiativeTag | None = None
+    template_type: str | None = None

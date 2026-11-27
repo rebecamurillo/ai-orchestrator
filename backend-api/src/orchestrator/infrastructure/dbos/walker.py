@@ -1,7 +1,7 @@
 """The walker: the durable loop that executes a Run's rows, one at a time, exactly once.
 
 Every rule this loop needs is in `application/use_cases/walk.py`; what is here is the
-durability. `build_walk` declares five durable steps and the workflow that calls them, and
+durability. `build_walk` declares seven durable steps and the workflow that calls them, and
 the workflow's body is deliberately tiny: each branch tests a value a step returned, so a
 replay after a restart takes the same branch it took before it. Nothing here reads a clock,
 a database or an environment outside a step (AD-6).
@@ -21,7 +21,10 @@ The loop, once:
    Repository partition are held for the whole wait, which is what AD-12 asks for. A message
    is the Operator's signal — already applied and committed by `signal_run` before the engine
    was told — so the walker only carries its kind forward as the next row's `resume_signal`
-   and loops.
+   and loops. A message carrying a `stop` other than the Run's current `park_seq` (read in the
+   `current_stop` step) was written for an earlier stop: it is logged and discarded, and the
+   walk waits again. A message with no stop is taken as it is. After a message that resumes
+   (never `cancel`), the walk waits until `open_turns` finds no session turn still running.
 5. A `recv` that returns `None` is the deadline, and `expire` decides what that means: the
    Run fails `parked 30 days`, unless a signal won the race, in which case it answers with
    the status that signal left and the walk carries on rather than abandoning a Run that is
@@ -50,6 +53,7 @@ from orchestrator.application.steps import StepPorts
 from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.use_cases import walk
 from orchestrator.application.use_cases.calculate_metrics import CalculationPorts
+from orchestrator.application.use_cases.initiative_advance import AdvancePorts
 from orchestrator.application.use_cases.walk import Held, WalkPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.statuses import GateEvent
@@ -80,6 +84,15 @@ CANCELLED = "cancelled"
 
 #: The key the Operator's signal travels under in a `recv` message.
 SIGNAL_KIND = "kind"
+
+#: The key a signal's stop travels under in a `recv` message, and what is logged when a
+#: message naming an earlier stop is dropped.
+STOP = "stop"
+STALE_SIGNAL = "stale signal discarded"
+
+#: The wake-up that never waits for a killed turn, and what is logged once when a wait starts.
+CANCEL_KIND = "cancel"
+WAITING_FOR_KILLED_TURN = "waiting for killed turn"
 
 #: What the walker logs when a message arrives carrying no signal kind it can read.
 UNREADABLE = "unreadable resume message"
@@ -127,20 +140,19 @@ class WalkerDeps:
     #: among them, and any process built before this hook existed.
     run_finished: Callable[[UUID], None] | None = None
     #: The readiness hook (SPEC CAP-8): called with a Run's id whenever a step of this walk
-    #: leaves it in *any* terminal status — `done`, `failed` or `cancelled`. A second,
-    #: independent hook rather than a second effect on `run_finished`, because that one's
-    #: own `DONE`-only gate is a frozen test (`_finish`'s own docstring says which). `None`
-    #: in every process that wires no such effect — every unit test among them, and any
-    #: process built before this hook existed.
+    #: leaves it in *any* terminal status. Independent of `run_finished`, whose `DONE`-only
+    #: gate is a frozen test (`_finish`'s own docstring says which). `None` where none is wired.
     on_terminal: Callable[[UUID], None] | None = None
     #: How a step waits on a hold; a test replaces it.
     sleep: Callable[[float], None] = time.sleep
     #: The metrics calculation's scope (epic 2 story 5); `None` where no job is wired.
     calculation_writes: Callable[[], AbstractContextManager[CalculationPorts]] | None = None
+    #: The initiative advance's scope; `None` where no workflow is wired.
+    advance_writes: Callable[[], AbstractContextManager[AdvancePorts]] | None = None
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
-    """Declare the walker's five steps and its workflow on `engine`, and return the workflow.
+    """Declare the walker's seven steps and its workflow on `engine`, and return the workflow.
 
     Each step is its own small factory so that this function stays a composition and the
     library's decorators are applied in exactly one place per step.
@@ -151,23 +163,27 @@ def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]
         apply_result=engine.step(_apply_result(deps)),
         close_run=engine.step(_close_run(deps)),
         expire=engine.step(_expire(deps)),
+        open_turns=engine.step(_open_turns(deps)),
+        current_stop=engine.step(_current_stop(deps)),
     )
     return engine.workflow(_walk(engine, deps, steps))
 
 
 @dataclass(frozen=True)
 class _Steps:
-    """The five durable steps a walk is made of, already declared on the engine."""
+    """The seven durable steps a walk is made of, already declared on the engine."""
 
     next_row: Callable[[str], int | None]
     attempt_row: Callable[[str, int, str | None], dict[str, Any]]
     apply_result: Callable[[str, int, dict[str, Any]], str]
     close_run: Callable[[str], str]
     expire: Callable[[str], str]
+    open_turns: Callable[[str], int]
+    current_stop: Callable[[str], int]
 
 
 def _walk(engine: DurableEngine, deps: WalkerDeps, steps: _Steps) -> Callable[[str], None]:
-    """The workflow body: five calls and four branches, each on a value a step returned."""
+    """The workflow body: seven calls and four branches, each on a value a step returned."""
 
     def run_walk(run_id: str) -> None:
         log.info(WALK_STARTED, run_id=run_id)
@@ -180,9 +196,11 @@ def _walk(engine: DurableEngine, deps: WalkerDeps, steps: _Steps) -> Callable[[s
                 status = steps.apply_result(run_id, seq, steps.attempt_row(run_id, seq, resume))
             resume = None
             if status == NEEDS_YOU:
-                message = engine.recv(HUMAN_TOPIC.format(run_id=run_id), deps.human_wait_seconds)
+                message = _receive(engine, deps, steps, run_id)
                 if message is not None:
                     resume = _kind(message, run_id)
+                    if resume != CANCEL_KIND:
+                        _settle(deps, steps, run_id)
                     continue
                 status = steps.expire(run_id)
                 if status == RUNNING:
@@ -264,12 +282,13 @@ def _finish(deps: WalkerDeps, run_id: str, status: str) -> None:
     """The two completion hooks (4.10, SPEC CAP-8), run from inside the step that just left
     the Run `done` or otherwise terminal.
 
-    Not a sixth declared step of its own: `test_dbos_walker.py::
-    test_the_walk_declares_five_steps_and_one_workflow` pins the walk at exactly five, and
-    that test is frozen (hard rule 1). Each call is best-effort — its own failure is logged
-    and swallowed rather than raised, because by the time either runs the Run's own status
-    is already durable, and retrying the step that reached it over a hook that only
-    refreshes a read model would risk re-applying a transition that already happened.
+    Not a declared step of its own: the walk's step sequence is pinned by
+    `test_dbos_walker.py::test_the_walk_declares_five_steps_and_one_workflow`.
+
+    Each call is best-effort — its own failure is logged and swallowed rather than raised,
+    because by the time either runs the Run's own status is already durable, and retrying
+    the step that reached it over a hook that only refreshes a read model would risk
+    re-applying a transition that already happened.
 
     `run_finished`'s own `DONE`-only gate is exactly what it always was:
     `tests/unit/test_dbos_walker_on_finished.py::
@@ -300,6 +319,55 @@ def _expire(deps: WalkerDeps) -> Callable[[str], str]:
             return walk.expire(_walk_ports(deps, ports), UUID(run_id))
 
     return expire
+
+
+def _open_turns(deps: WalkerDeps) -> Callable[[str], int]:
+    def open_turns(run_id: str) -> int:
+        with deps.open_ports() as ports:
+            return walk.open_turns(_walk_ports(deps, ports), UUID(run_id))
+
+    return open_turns
+
+
+def _settle(deps: WalkerDeps, steps: _Steps, run_id: str) -> None:
+    """Poll until no session turn of the Run is running; each answer is a recorded step."""
+    count = steps.open_turns(run_id)
+    if count:
+        log.info(WAITING_FOR_KILLED_TURN, run_id=run_id, count=count)
+    while count:
+        deps.sleep(HOLD_POLL_SECONDS)
+        count = steps.open_turns(run_id)
+
+
+def _current_stop(deps: WalkerDeps) -> Callable[[str], int]:
+    def current_stop(run_id: str) -> int:
+        with deps.open_ports() as ports:
+            return walk.current_stop(_walk_ports(deps, ports), UUID(run_id))
+
+    return current_stop
+
+
+def _stop(message: object) -> int | None:
+    """The stop a message carries, or `None` when it names none the walker can read."""
+    stop = message.get(STOP) if isinstance(message, dict) else None
+    return stop if isinstance(stop, int) else None
+
+
+def _receive(engine: DurableEngine, deps: WalkerDeps, steps: _Steps, run_id: str) -> object | None:
+    """The next message for the Run's current stop, or `None` at the deadline.
+
+    A message whose stop is not the Run's current one was written for an earlier stop and
+    must not land on this one; each new wait gets the full deadline.
+    """
+    while True:
+        message = engine.recv(HUMAN_TOPIC.format(run_id=run_id), deps.human_wait_seconds)
+        stop = _stop(message)
+        if message is None or stop is None:
+            return message
+        current = steps.current_stop(run_id)
+        if stop == current:
+            return message
+        log.info(STALE_SIGNAL, run_id=run_id, stop=stop, current_stop=current)
 
 
 def _kind(message: object, run_id: str) -> str | None:

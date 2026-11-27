@@ -60,6 +60,7 @@ def to_entity(row: TemplateVersionRow) -> TemplateVersion:
         calls=tuple(call_ref(call[CALL_NAME_KEY], call[CALL_VERSION_KEY]) for call in row.calls),
         created_at=row.created_at,
         source=row.source,
+        package_sha=row.package_sha,
     )
 
 
@@ -127,6 +128,7 @@ class SQLAlchemyTemplateVersionRepository:
                 calls=calls_json(version),
                 created_at=version.created_at,
                 source=version.source,
+                package_sha=version.package_sha,
             )
         )
         try:
@@ -136,6 +138,16 @@ class SQLAlchemyTemplateVersionRepository:
                 f"template version {version.name}@{version.version} taken by a concurrent save;"
                 " nothing stored"
             ) from error
+
+    def get_by_package_sha(self, name: str, sha: str) -> TemplateVersion | None:
+        if not _storable(name) or not _storable(sha):
+            return None
+        row = self._session.scalars(
+            select(TemplateVersionRow)
+            .where(TemplateVersionRow.name == name, TemplateVersionRow.package_sha == sha)
+            .order_by(TemplateVersionRow.version)
+        ).first()
+        return None if row is None else to_entity(row)
 
     def names_with_source(self, source: str) -> frozenset[str]:
         rows = self._session.scalars(

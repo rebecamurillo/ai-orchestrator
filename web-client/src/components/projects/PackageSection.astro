@@ -1,0 +1,134 @@
+---
+import { actions } from 'astro:actions';
+
+import { PACKAGE_HINT, defaultRepositoryId, packageKvRows } from '../../lib/projects/package';
+import type { PackageOut } from '../../lib/projects/package';
+import Button from '../Button.astro';
+import EmptyState from '../EmptyState.astro';
+import KvTable from '../KvTable.astro';
+import SectionHead from '../SectionHead.astro';
+
+interface Props {
+  projectId: string;
+  pkg: PackageOut | null | 'unavailable';
+  repositories: { id: string; slug: string }[];
+  refusal: { install: string | null; remove: string | null };
+}
+
+const { projectId, pkg, repositories, refusal } = Astro.props;
+const installed = pkg !== null && pkg !== 'unavailable' ? pkg : null;
+const selectedRepository = defaultRepositoryId(installed, repositories);
+const installAction = `?id=${projectId}&${actions.packages.install.toString().slice(1)}`;
+const removeAction = `?id=${projectId}&${actions.packages.remove.toString().slice(1)}`;
+---
+
+<SectionHead label="PACKAGE" />
+{
+  pkg === 'unavailable' ? (
+    <EmptyState
+      testId="projects-package-error"
+      headline="PACKAGE UNAVAILABLE"
+      lines={[
+        'The list could not be read from backend-api.',
+        'Reload the page once the connection is restored.',
+      ]}
+    />
+  ) : (
+    <section data-testid="projects-package">
+      {installed && (
+        <>
+          <KvTable rows={packageKvRows(installed)} />
+          <p class="hint">{PACKAGE_HINT}</p>
+        </>
+      )}
+      {repositories.length > 0 && (
+        <form method="POST" action={installAction}>
+          <input type="hidden" name="projectId" value={projectId} />
+          <label>
+            repository
+            <select name="repositoryId">
+              {repositories.map((r) => (
+                <option value={r.id} selected={r.id === selectedRepository}>
+                  {r.slug}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            path
+            <input name="path" value={installed?.path ?? ''} required />
+          </label>
+          <label>
+            ref
+            <input name="ref" value={installed?.ref ?? ''} required />
+          </label>
+          <Button
+            type="submit"
+            label={installed ? 'Replace package' : 'Install package'}
+            testId={installed ? 'projects-package-replace' : 'projects-package-install'}
+          />
+          {refusal.install && (
+            <p class="refusal" data-testid="projects-package-install-refusal">
+              {refusal.install}
+            </p>
+          )}
+        </form>
+      )}
+      {installed && (
+        <form method="POST" action={removeAction}>
+          <input type="hidden" name="projectId" value={projectId} />
+          <Button
+            variant="destructive"
+            type="submit"
+            label="Remove package"
+            testId="projects-package-remove"
+          />
+          {refusal.remove && (
+            <p
+              class="refusal"
+              data-signal="needs-you"
+              data-testid="projects-package-remove-refusal"
+            >
+              {refusal.remove}
+            </p>
+          )}
+        </form>
+      )}
+    </section>
+  )
+}
+
+<style>
+  .hint {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+  }
+
+  .refusal {
+    flex-basis: 100%;
+    color: var(--color-text-secondary);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  .refusal[data-signal='needs-you'] {
+    color: var(--color-signal-needs-you);
+  }
+</style>

@@ -21,6 +21,8 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.application.rules.signals import Rule, record_text, validate
+from orchestrator.application.use_cases import merge_session
+from orchestrator.application.use_cases.initiative_advance import enqueue_advances, record_advance
 from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.signal_effects import EFFECTS, CancelPlan, Effect
@@ -108,19 +110,28 @@ class Applied:
     run: Run
     rule: Rule
     effect: Effect
+    #: The Run's `park_seq` as read under lock, before any write: the stop this signal answers.
+    stop: int
 
 
 def apply_signal(
-    ports: SignalPorts, run: Run, signal: Signal, *, actor: Actor | None = None
+    ports: SignalPorts,
+    run: Run,
+    signal: Signal,
+    *,
+    actor: Actor | None = None,
+    text: str | None = None,
 ) -> Applied:
-    """Every write of one signal on a Run read under its row lock; `actor` overrides the
-    table's. Refusals raise before anything is written."""
+    """Every write of one signal on a Run read under its row lock; `actor` and `text`
+    override the table's. Refusals raise before anything is written."""
     writers = ports.writers
     refuse_stale_stop(run, signal)
+    stop = run.park_seq
     rows = writers.steps.list_for_run(run.id)
     park_row = _park_row(rows, run.park_path)
     rule = validate(run, park_row, signal, rows)
     _check_mode(ports, run, signal)
+    run = merge_session.end_for_resume(writers, run, park_row, signal, actor or rule.actor)
     record(
         writers,
         run,
@@ -128,7 +139,7 @@ def apply_signal(
             event=signal.kind,
             actor=actor or rule.actor,
             path=run.park_path,
-            text=record_text(rule, signal.payload),
+            text=text or record_text(rule, signal.payload),
             payload=signal.payload,
         ),
     )
@@ -137,7 +148,8 @@ def apply_signal(
     # Park dependents in the same UoW when this run reaches `cancelled` (story 5-4).
     if run.status == "cancelled":
         park_dependents(writers, run)
-    return Applied(run=run, rule=rule, effect=effect)
+    record_advance(writers, run)
+    return Applied(run=run, rule=rule, effect=effect, stop=stop)
 
 
 def finish_signal(
@@ -146,11 +158,13 @@ def finish_signal(
     """After the commit: tell the engine, and enqueue a done Run's dependents."""
     run, rule, effect = applied.run, applied.rule, applied.effect
     resumed = effect.resume and rule.run_event is not None and run.status == RUNNING
-    _tell_the_engine(ports, run_id, signal, resumed=resumed, finished=effect.finished)
+    stamped = signal.model_copy(update={"stop": applied.stop})
+    _tell_the_engine(ports, run_id, stamped, resumed=resumed, finished=effect.finished)
     # Two-phase enqueue for done dependents after signal (e.g. skip-to-done, story 5-4).
     if run.status == "done":
         enqueue_dependents(ports.writers, ports.writers.engine, run)
     # `ports.engine`, not `writers.engine`: the signal providers open writers without one
+    enqueue_advances(ports.engine, ports.writers, run)
     enqueue_queued(ports.engine, ports.writers.calculations, run)
     return SignalOutcome(run=run, resumed=resumed, cancel_plan=effect.cancel_plan)
 

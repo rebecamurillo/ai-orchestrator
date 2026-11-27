@@ -48,6 +48,7 @@ VERBS: Final[Mapping[str, str]] = {
     "skip_epic": "epic skipped",
     "terminal_resume": "resumed",
     "cancel": "Run cancelled",
+    "step_close": "step closed",
 }
 BUDGET_RAISE: Final = "budget_raise"
 RAISED: Final = "budget raised"

@@ -13,13 +13,14 @@ from uuid import UUID
 
 from orchestrator.application.jobs.worktree_gc import WorktreeGcPorts, run_worktree_gc
 from orchestrator.application.steps.context import RunEnvironment
+from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.values import Worktree
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.git import FakeGit
-from tests.unit.fakes.runs import FakeRunRepository
+from tests.unit.fakes.runs import FakeAttemptRepository, FakeRunRepository
 from tests.unit.fakes.workspace import FakeWorkspace
 
 NOW = datetime(2026, 9, 7, tzinfo=UTC)
@@ -68,13 +69,14 @@ def _read_environment(known: dict[UUID, RunEnvironment], run_id: UUID) -> RunEnv
     return known.get(run_id)
 
 
-def a_ports(
+def a_ports(  # noqa: PLR0913
     runs: FakeRunRepository,
     git: FakeGit,
     logs: FakeWorkspace,
     *,
     known: dict[UUID, RunEnvironment] | None = None,
     retention_days: int = RETENTION_DAYS,
+    attempts: FakeAttemptRepository | None = None,
 ) -> WorktreeGcPorts:
     environments = known or {}
     uow = FakeUnitOfWork()
@@ -84,6 +86,7 @@ def a_ports(
         runs=runs,
         git=git,
         logs=logs,
+        attempts=attempts if attempts is not None else FakeAttemptRepository(),
         clock=FakeClock(NOW),
         read_environment=lambda run_id: _read_environment(environments, run_id),
         work_dir=WORK_DIR,
@@ -188,3 +191,48 @@ def test_every_worktree_of_a_run_is_removed() -> None:
 
     removed = [call[1][1] for call in git.calls if call[0] == "remove_worktree"]
     assert removed == [Path("/work/p/r/wt/a"), Path("/work/p/r/wt/b")]
+
+
+def an_attempt(run: Run) -> Attempt:
+    return Attempt(id=new_id(), run_id=run.id, step_run_id=new_id(), n=1, status="done")
+
+
+def test_the_sweep_stamps_the_swept_runs_attempts_once_and_not_the_others() -> None:
+    """Epic 1 story 3 (AD-40): `log_removed_at` is the sweep's mark."""
+    old = a_run()
+    recent = a_run(ended_at=NOW - timedelta(days=1))
+    mine, theirs = an_attempt(old), an_attempt(recent)
+    attempts = FakeAttemptRepository([mine, theirs])
+    ports = a_ports(
+        FakeRunRepository([old, recent]), FakeGit(), a_logs_workspace(), attempts=attempts
+    )
+
+    run_worktree_gc(ports)
+
+    assert attempts.attempts[mine.id].log_removed_at == NOW
+    assert attempts.attempts[theirs.id].log_removed_at is None
+
+    run_worktree_gc(ports)
+
+    assert attempts.calls.count(("mark_logs_removed", old.id)) == 1
+    assert attempts.attempts[mine.id].log_removed_at == NOW
+
+
+def test_the_stamp_follows_the_log_removal_and_precedes_the_commit() -> None:
+    run = a_run()
+    events: list[str] = []
+    logs = a_logs_workspace()
+    attempts = FakeAttemptRepository([an_attempt(run)])
+    ports = a_ports(FakeRunRepository([run]), FakeGit(), logs, attempts=attempts)
+    original_remove, original_mark, original_commit = (
+        logs.remove,
+        attempts.mark_logs_removed,
+        ports.uow.commit,
+    )
+    logs.remove = lambda path: (events.append("remove"), original_remove(path))[1]  # type: ignore[method-assign]
+    attempts.mark_logs_removed = lambda r, at: (events.append("mark"), original_mark(r, at))[1]  # type: ignore[method-assign]
+    ports.uow.commit = lambda: (events.append("commit"), original_commit())[1]  # type: ignore[method-assign]
+
+    run_worktree_gc(ports)
+
+    assert events == ["remove", "mark", "commit"]

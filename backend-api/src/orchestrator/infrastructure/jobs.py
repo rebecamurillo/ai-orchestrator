@@ -24,11 +24,18 @@ from functools import partial
 from pathlib import Path
 
 from orchestrator.application.jobs.clone_check import run_clone_check_job
+from orchestrator.application.jobs.initiative_pr_check import (
+    InitiativePrCheckPorts,
+    run_initiative_pr_check,
+)
 from orchestrator.application.jobs.worktree_gc import WorktreeGcPorts, run_worktree_gc
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
+    SessionUnitOfWork,
+    SQLAlchemyAttemptRepository,
+    SQLAlchemyInitiativeRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
@@ -36,12 +43,14 @@ from orchestrator.infrastructure.db import (
 )
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.db.writers import SessionFactory
+from orchestrator.infrastructure.github import GitHubPullRequests
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.workspace import FsWorkspace
 
-#: The two names `engine.schedule` registers them under, and the crons read off `Settings`.
+#: The names `engine.schedule` registers the jobs under, and the crons read off `Settings`.
 CLONE_CHECK_NAME = "clone_check"
 WORKTREE_GC_NAME = "worktree_gc"
+INITIATIVE_PR_CHECK_NAME = "initiative_pr_check"
 
 #: The directory every Run's log files live under (`application/steps/context.py::log_path`).
 LOGS_DIRECTORY = "logs"
@@ -79,6 +88,7 @@ def _worktree_gc_job(
                 runs=SQLAlchemyRunRepository(uow.session),
                 git=git,
                 logs=FsWorkspace(logs_root),
+                attempts=SQLAlchemyAttemptRepository(uow.session),
                 clock=SystemClock(),
                 read_environment=partial(
                     read_run_environment, session_factory, settings.bmad_version
@@ -91,10 +101,35 @@ def _worktree_gc_job(
     return run
 
 
+def _initiative_pr_check_job(
+    session_factory: SessionFactory, settings: Settings
+) -> Callable[[], None]:
+    pull_requests = GitHubPullRequests(settings.github_token.get_secret_value())
+
+    def run() -> None:
+        # the use case opens its own transactions (read pass, then one per write): it gets a
+        # SessionUnitOfWork, since a SQLAlchemyUnitOfWork refuses a second entry
+        session = session_factory()
+        try:
+            run_initiative_pr_check(
+                InitiativePrCheckPorts(
+                    uow=SessionUnitOfWork(session),
+                    initiatives=SQLAlchemyInitiativeRepository(session),
+                    runs=SQLAlchemyRunRepository(session),
+                    pull_requests=pull_requests,
+                    clock=SystemClock(),
+                )
+            )
+        finally:
+            session.close()
+
+    return run
+
+
 def scheduled_jobs(
     settings: Settings, session_factory: SessionFactory, git: Git
 ) -> list[tuple[str, str, Callable[[], None]]]:
-    """`(name, cron, job)` for the two jobs SPEC CAP-11 registers, in that order."""
+    """`(name, cron, job)` for the jobs registered here, in that order."""
     return [
         (
             CLONE_CHECK_NAME,
@@ -105,5 +140,10 @@ def scheduled_jobs(
             WORKTREE_GC_NAME,
             settings.worktree_gc_cron,
             _worktree_gc_job(session_factory, git, settings),
+        ),
+        (
+            INITIATIVE_PR_CHECK_NAME,
+            settings.initiative_pr_check_cron,
+            _initiative_pr_check_job(session_factory, settings),
         ),
     ]

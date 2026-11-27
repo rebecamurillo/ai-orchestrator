@@ -34,7 +34,8 @@ def queued_row():
 def test_the_new_kinds_are_named_by_the_alphabets() -> None:
     assert "paused" in PARK_KINDS
     assert "pause" in SIGNAL_KINDS
-    assert CHK_PARK_KINDS == frozenset({"checkpoint", "paused"})
+    # story 1 (epic 4 conversation stop), 2026-11-22: an open conversation renders CHK too.
+    assert CHK_PARK_KINDS == frozenset({"checkpoint", "paused", "conversation"})
 
 
 # ── pause: when it is admitted ───────────────────────────────────────────────

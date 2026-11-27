@@ -301,6 +301,34 @@
   align-items: center;
 }
 
+button.wf-guardrail-entry {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button.wf-guardrail-entry:hover,
+button.wf-guardrail-entry:focus-visible {
+  color: var(--color-accent);
+}
+
+.wf-guardrail-entry-selected,
+button.wf-guardrail-entry.wf-guardrail-entry-selected {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.wf-guardrail-lab {
+  letter-spacing: var(--type-control-tracking);
+}
+
+.wf-guardrail-agent {
+  color: var(--color-text-secondary);
+}
+
 /* the separator is markup, not `content`: a generated `·` is absent from the accessible
    name, and the strip read `syncverifycommit-guard` */
 .wf-guardrail-sep {
@@ -372,6 +400,17 @@
   font-size: var(--type-meta);
 }
 
+.wf-node.wf-node-selected {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+button.wf-node-cta {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+}
+
 .wf-node-cta {
   display: inline-block;
   margin-left: auto;
@@ -384,6 +423,18 @@
   font-size: var(--type-control);
   letter-spacing: var(--type-control-tracking);
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.wf-node-files {
+  margin-left: auto;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-line-strong);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
   cursor: pointer;
 }
 

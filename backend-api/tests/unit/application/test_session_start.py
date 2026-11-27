@@ -155,7 +155,8 @@ def test_an_epic_scope_outside_any_epic_is_refused() -> None:
 def test_an_unknown_scope_is_refused() -> None:
     message = refused(a_session_world(), Invalid, scope="galaxy")
 
-    assert message == "unknown scope galaxy: one of story, epic, run"
+    # epic 4 story 4 (2026-11-22): the scope enum gains `step`
+    assert message == "unknown scope galaxy: one of story, epic, run, step"
 
 
 def test_an_unknown_harness_is_refused() -> None:

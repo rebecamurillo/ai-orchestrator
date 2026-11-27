@@ -157,6 +157,7 @@ opinion about are few — walk these and leave the rest alone:
 | `WEB_CLIENT_PORT`, `BACKEND_API_PORT` | 4321 or 8000 already taken on their machine |
 | `BIND_ADDRESS` | `0.0.0.0` exposes the UI and API to the network. One bearer token is the entire authentication and nothing rate-limits it — read the README's *Exposure* section to them before they do this |
 | `MAX_ACTIVE_RUNS` | how many Runs the engine holds at once; a parked Run keeps its slot |
+| `MAX_INTERACTIVE_RUNS` | how many interactive (conversation) Runs the engine holds at once, apart from MAX_ACTIVE_RUNS |
 | `READINESS_MODELS` | the default model per harness; every model named must exist in the gateway |
 | `READINESS_BUDGET_USD` | the budget the readiness diagnostic gives itself |
 | `WORKTREE_RETENTION_DAYS` | how long a finished Run's worktrees and logs survive |
@@ -657,6 +658,23 @@ installer moves it to the newer contract (`connect`). A project
 still on the beta.4 kit is moved over once by reinstalling with the bootstrap installer
 (`connect`). Then
 `./install.sh doctor`, and check the templates — `host/runbooks`, *Template refresh*.
+
+### Initiative conversations
+
+An initiative's spec conversation stays parked until the operator answers, often for days, so
+an upgrade does not wait for it to drain. The order that keeps every conversation:
+
+1. `POST /api/v1/instance/hold` with `{ttl_seconds, reason}` (`ttl_seconds` 1–3600). It
+   answers 409, naming them in `errors[]`, while any step is working: wait for them, then ask
+   again.
+2. `POST /api/v1/instance/upgrade-prepare`. It cancels each conversation that waits for the
+   operator with the reason `upgrade` and lists them. It answers 409 when no hold stands, or when
+   an initiative's interactive Run is queued, running or stopped on something other than a
+   conversation (a merge conflict, a protected path, a blocked agent): answer or cancel that Run
+   first.
+3. `./install.sh upgrade --tag <newer>`.
+4. At start the new release reopens each listed step as its next round. The earlier turns stay on
+   the initiative page.
 
 <!-- /guide -->
 

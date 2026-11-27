@@ -15,6 +15,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from orchestrator.api.schemas.common import UtcTimestamp, drop_default
+from orchestrator.application.rules.attention import Attention
+from orchestrator.application.use_cases.initiative_view_types import InitiativeTag
 from orchestrator.application.use_cases.run_views import BoardView, Card, Progress
 from orchestrator.domain.statuses import ParkKind, RunStatus
 
@@ -37,6 +39,24 @@ class ProgressOut(BaseModel):
         )
 
 
+class InitiativeTagOut(BaseModel):
+    id: UUID
+    slug: str
+    step: str | None
+    position: int
+    workflow_count: int
+
+    @classmethod
+    def of(cls, tag: InitiativeTag) -> InitiativeTagOut:
+        return cls(
+            id=tag.id,
+            slug=tag.slug,
+            step=tag.step,
+            position=tag.position,
+            workflow_count=tag.workflow_count,
+        )
+
+
 class CardOut(BaseModel):
     id: UUID
     token: str
@@ -55,6 +75,9 @@ class CardOut(BaseModel):
     needs_you_since: UtcTimestamp | None
     label: str = Field(default="", json_schema_extra=drop_default)
     label_set_by_operator: bool = Field(default=False, json_schema_extra=drop_default)
+    initiative: InitiativeTagOut | None = Field(default=None, json_schema_extra=drop_default)
+    attention: Attention | None = Field(default=None, json_schema_extra=drop_default)
+    template_type: str | None = Field(default=None, json_schema_extra=drop_default)
 
     @classmethod
     def of(cls, card: Card) -> CardOut:
@@ -76,6 +99,9 @@ class CardOut(BaseModel):
             needs_you_since=card.needs_you_since,
             label=card.label,
             label_set_by_operator=card.label_set_by_operator,
+            initiative=None if card.initiative is None else InitiativeTagOut.of(card.initiative),
+            attention=card.attention,
+            template_type=card.template_type,
         )
 
 

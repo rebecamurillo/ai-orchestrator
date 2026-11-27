@@ -49,7 +49,8 @@ def locked() -> SessionWorld:
 
 
 def test_the_two_kinds_are_signal_kinds_with_one_rule_each() -> None:
-    assert SIGNAL_KINDS[-2:] == ("session_start", "session_end")
+    # story 1 (epic 4 conversation stop), 2026-11-22: `step_close` is appended after them.
+    assert SIGNAL_KINDS[-3:] == ("session_start", "session_end", "step_close")
     assert VALID["session_start"].operator_action is False
     assert VALID["session_end"].operator_action is False
 

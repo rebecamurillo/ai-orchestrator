@@ -16,10 +16,12 @@ they made — one unit of work per transition (AD-8) — as on what they stored.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 from uuid import UUID
 
 from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
+from orchestrator.domain.entities.initiative import InitiativeKey
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.statuses import TERMINAL_RUN, RunStatus
@@ -38,7 +40,27 @@ class FakeRunRepository:
         self.calls.append(("add", run.id))
         if run.id in self.runs:
             raise ValueError(f"a run with id {run.id} is already stored")
+        if run.initiative_id is not None and self.get_by_initiative_key(_key_of(run)) is not None:
+            raise ValueError(f"a run already holds initiative key {_key_of(run)}")
         self.runs[run.id] = run
+
+    def get_by_initiative_key(self, key: InitiativeKey) -> Run | None:
+        self.calls.append(("get_by_initiative_key", key))
+        return next(
+            (
+                run
+                for run in self.runs.values()
+                if run.initiative_id is not None and _key_of(run) == key
+            ),
+            None,
+        )
+
+    def list_for_initiative(self, initiative_id: UUID) -> list[Run]:
+        self.calls.append(("list_for_initiative", initiative_id))
+        return sorted(
+            (run for run in self.runs.values() if run.initiative_id == initiative_id),
+            key=lambda run: (run.created_at, run.id),
+        )
 
     def get(self, run_id: UUID) -> Run | None:
         self.calls.append(("get", run_id))
@@ -186,6 +208,12 @@ class FakeAttemptRepository:
             raise ValueError(f"row {attempt.step_run_id} already has attempt {attempt.n}")
         self.attempts[attempt.id] = attempt
 
+    def mark_logs_removed(self, run_id: UUID, at: datetime) -> None:
+        self.calls.append(("mark_logs_removed", run_id))
+        for attempt_id, stored in self.attempts.items():
+            if stored.run_id == run_id and stored.log_removed_at is None:
+                self.attempts[attempt_id] = stored.model_copy(update={"log_removed_at": at})
+
     def get(self, attempt_id: UUID) -> Attempt | None:
         self.calls.append(("get", attempt_id))
         return self.attempts.get(attempt_id)
@@ -280,3 +308,14 @@ def _newest_first(runs: Iterable[Run]) -> list[Run]:
     millisecond — the same order the adapter's `ORDER BY created_at DESC, id DESC` gives.
     """
     return sorted(runs, key=lambda run: (run.created_at, run.id), reverse=True)
+
+
+def _key_of(run: Run) -> InitiativeKey:
+    assert run.initiative_round is not None
+    assert run.initiative_position is not None
+    assert run.initiative_id is not None
+    return InitiativeKey(
+        initiative_id=run.initiative_id,
+        round=run.initiative_round,
+        position=run.initiative_position,
+    )

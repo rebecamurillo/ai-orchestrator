@@ -52,6 +52,7 @@ from uuid import UUID
 
 import structlog
 
+from orchestrator.application.rules import session
 from orchestrator.application.steps import StepPorts, execute
 from orchestrator.application.use_cases import walk_context
 from orchestrator.application.use_cases.apply_step_result import (
@@ -59,6 +60,7 @@ from orchestrator.application.use_cases.apply_step_result import (
     apply_step_result,
     budget_second_record,
 )
+from orchestrator.application.use_cases.initiative_advance import enqueue_advances, record_advance
 from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.start_attempt import start_attempt
 from orchestrator.application.use_cases.walk_context import redispatches_to
@@ -259,7 +261,8 @@ def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:
     """End a Run that has nothing queued: `done` when every row finished, parked when not."""
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        # locked, as `signal_run` locks it: a cancel committed meanwhile is read, not overwritten
+        run = require_run(writers, run_id, lock=True)
         if run.status != RUNNING:
             log.info(LATE_CLOSE, run_id=str(run_id), status=run.status)
             return run.status
@@ -272,18 +275,41 @@ def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:
         else:
             reason = STALLED.format(path=stalled.path, status=stalled.status)
             run = park_run(writers, run, Park(kind="internal", reason=reason, path=stalled.path))
+        record_advance(writers, run)
         writers.uow.commit()
     if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
         enqueue_dependents(writers, writers.engine, run)
+    enqueue_advances(writers.engine, writers, run)
     enqueue_queued(writers.engine, writers.calculations, run)
     return run.status
+
+
+def current_stop(ports: WalkPorts, run_id: UUID) -> int:
+    """The Run's current `park_seq`: what a received signal's stop is compared with."""
+    with ports.writers.uow:
+        return require_run(ports.writers, run_id).park_seq
+
+
+def open_turns(ports: WalkPorts, run_id: UUID) -> int:
+    """How many session turns of the Run are still running: a killed one closes only when its
+    own workflow has swept its trees, and the walk must not touch them before then."""
+    writers = ports.writers
+    with writers.uow:
+        return sum(
+            1
+            for row in writers.steps.list_for_run(run_id)
+            for attempt in writers.attempts.list_for_row(row.id)
+            if attempt.role == session.SESSION_ROLE
+            and attempt.status == "running"
+            and attempt.ended_at is None
+        )
 
 
 def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:
     """The 30-day `recv` reached its deadline: the Run fails, unless a signal beat it."""
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        run = require_run(writers, run_id, lock=True)
         if run.status != NEEDS_YOU:
             log.info(NOT_PARKED, run_id=str(run_id), status=run.status)
             return run.status
@@ -293,6 +319,8 @@ def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:
             return run.status
         run = expire_run(writers, run)
         park_dependents(writers, run)  # park dependents in same UoW (story 5-4)
+        record_advance(writers, run)
         writers.uow.commit()
+    enqueue_advances(writers.engine, writers, run)
     enqueue_queued(writers.engine, writers.calculations, run)
     return run.status

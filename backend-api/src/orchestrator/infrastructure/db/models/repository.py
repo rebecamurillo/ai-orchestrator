@@ -24,6 +24,7 @@ from sqlalchemy import DateTime, ForeignKey, Index, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from orchestrator.domain.entities.repository import DEFAULT_INITIATIVE_FOLDER
 from orchestrator.infrastructure.db.base import Base
 from orchestrator.infrastructure.db.models.project import ProjectRow
 
@@ -56,5 +57,6 @@ class RepositoryRow(Base):
     test_globs: Mapped[list[str]] = mapped_column(JSONB())
     package_manager: Mapped[str] = mapped_column(Text())
     clone_check: Mapped[dict[str, Any]] = mapped_column(JSONB())
+    initiative_folder: Mapped[str] = mapped_column(Text(), server_default=DEFAULT_INITIATIVE_FOLDER)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

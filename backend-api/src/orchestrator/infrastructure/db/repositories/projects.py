@@ -36,6 +36,11 @@ MUTABLE_FIELDS = (
     "name",
     "context_text",
     "log_prompt_content",
+    "default_budget_usd",
+    "default_harness",
+    "default_model",
+    "default_autonomy",
+    "default_senior_model",
     "updated_at",
 )
 
@@ -62,6 +67,11 @@ def to_entity(row: ProjectRow) -> Project:
         ),
         log_prompt_content=row.log_prompt_content,
         builtin=row.slug == READINESS_PROJECT_SLUG,
+        default_budget_usd=row.default_budget_usd,
+        default_harness=row.default_harness,
+        default_model=row.default_model,
+        default_autonomy=row.default_autonomy,  # type: ignore[arg-type]
+        default_senior_model=row.default_senior_model,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -91,6 +101,11 @@ class SQLAlchemyProjectRepository:
                 context_paths=list(project.context_paths),
                 env_vars_enc=env_vars_json(project),
                 log_prompt_content=project.log_prompt_content,
+                default_budget_usd=project.default_budget_usd,
+                default_harness=project.default_harness,
+                default_model=project.default_model,
+                default_autonomy=project.default_autonomy,
+                default_senior_model=project.default_senior_model,
                 created_at=project.created_at,
                 updated_at=project.updated_at,
             )

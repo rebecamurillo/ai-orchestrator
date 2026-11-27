@@ -9,11 +9,18 @@ section head text reads it beside the rows, not through a second request.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Annotated, Any, Literal
+
+from pydantic import BaseModel, Field
 
 from orchestrator.api.schemas.common import Page, UtcTimestamp
 from orchestrator.api.schemas.runs import RunSummaryOut
 from orchestrator.application.use_cases.queue import QueueRow, QueueView
+
+
+def _drop_default(schema: dict[str, Any]) -> None:
+    """The same one-line definition as `run_alert.py`'s, duplicated rather than imported."""
+    schema.pop("default", None)
 
 
 class QueueItemOut(BaseModel):
@@ -25,6 +32,16 @@ class QueueItemOut(BaseModel):
     reason: str
     waiting_since: UtcTimestamp
     waiting_seconds: float
+    lane: Annotated[
+        Literal["walk", "interactive"],
+        Field(
+            json_schema_extra=_drop_default,
+            description=(
+                "the engine lane the Run waits in: `walk` (MAX_ACTIVE_RUNS) or `interactive` "
+                "(MAX_INTERACTIVE_RUNS), positions count per lane (AD-12)"
+            ),
+        ),
+    ] = "walk"
 
     @classmethod
     def of(cls, row: QueueRow) -> QueueItemOut:
@@ -35,6 +52,7 @@ class QueueItemOut(BaseModel):
             reason=row.reason,
             waiting_since=row.waiting_since,
             waiting_seconds=row.waiting_seconds,
+            lane=row.lane,
         )
 
 

@@ -31,14 +31,15 @@ discards every one of these rows.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
 
+from orchestrator.domain.entities.initiative import InitiativeKey
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.template import TemplateRef
-from orchestrator.domain.statuses import TERMINAL_RUN, RunStatus
+from orchestrator.domain.statuses import TERMINAL_RUN, Lane, RunStatus
 from orchestrator.domain.values import Worktree
 from orchestrator.infrastructure.db.models.run import RunRow
 
@@ -106,10 +107,14 @@ def to_entity(row: RunRow) -> Run:
         ended_at=row.ended_at,
         worktrees_removed=row.worktrees_removed,
         partition_branch=row.partition_branch,
+        lane=cast(Lane, row.lane or "walk"),
         # `or ()` for the reason `spend_provisional` reads `or False` just above: the
         # column's default is the database's, so a `RunRow` built in memory and not yet
         # flushed still carries `None` here.
         after_run_ids=tuple(row.after_run_ids or ()),
+        initiative_id=row.initiative_id,
+        initiative_round=row.initiative_round,
+        initiative_position=row.initiative_position,
     )
 
 
@@ -170,7 +175,11 @@ def row_values(run: Run) -> dict[str, Any]:
         "ended_at": run.ended_at,
         "worktrees_removed": run.worktrees_removed,
         "partition_branch": run.partition_branch,
+        "lane": run.lane,
         "after_run_ids": list(run.after_run_ids),
+        "initiative_id": run.initiative_id,
+        "initiative_round": run.initiative_round,
+        "initiative_position": run.initiative_position,
     }
 
 
@@ -272,6 +281,27 @@ class SQLAlchemyRunRepository:
                 RunRow.engine_ref == {},
             )
         )
+
+    def get_by_initiative_key(self, key: InitiativeKey) -> Run | None:
+        row = self._session.scalars(
+            select(RunRow).where(
+                RunRow.initiative_id == key.initiative_id,
+                RunRow.initiative_round == key.round,
+                RunRow.initiative_position == key.position,
+            )
+        ).first()
+        return None if row is None else to_entity(row)
+
+    def list_for_initiative(self, initiative_id: UUID) -> list[Run]:
+        # `populate_existing`: a cancel re-lists after another session committed the Runs'
+        # new status; without it this session keeps the rows it read before
+        rows = self._session.scalars(
+            select(RunRow)
+            .where(RunRow.initiative_id == initiative_id)
+            .order_by(RunRow.created_at, RunRow.id)
+            .execution_options(populate_existing=True)
+        ).all()
+        return [to_entity(row) for row in rows]
 
     def _read(self, statement: Any) -> list[Run]:
         """Every list is newest first; the id breaks a tie within one millisecond."""

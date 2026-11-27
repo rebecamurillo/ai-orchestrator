@@ -33,7 +33,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from orchestrator.domain.entities.template import TemplateRef
-from orchestrator.domain.statuses import ParkKind, RunStatus
+from orchestrator.domain.statuses import Lane, ParkKind, RunStatus
 from orchestrator.domain.values import Worktree
 
 
@@ -104,6 +104,9 @@ class Run(BaseModel):
     #: at `create_run` time from `plan.branches`; never written again. `None` on old runs that
     #: pre-date this field — those runs are treated as non-competing for branch-partition checks.
     partition_branch: str | None = None
+    #: The engine queue this Run waits in (AD-6, AD-12): set once by `create_run` from the
+    #: template type and the planned rows, read by every later enqueue, never written again.
+    lane: Lane = "walk"
     #: The Runs this one waits for before it may enter the engine (AD-12) — a fan-in list,
     #: empty by default, in the order the caller declared them. All of them `done` enqueues
     #: this Run; any of them `failed | cancelled` parks it `dependency`, naming that one.
@@ -111,6 +114,10 @@ class Run(BaseModel):
     #: null, so clearing buys nothing, and the retained edges are the durable record an
     #: initiative's DAG is rendered from (spine AD-12/AD-13 amendment, 2026-09-23).
     after_run_ids: tuple[UUID, ...] = ()
+    #: Set together, at creation only, by `create_run` (AD-36).
+    initiative_id: UUID | None = None
+    initiative_round: int | None = None
+    initiative_position: int | None = None
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False

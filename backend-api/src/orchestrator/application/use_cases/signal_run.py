@@ -64,6 +64,7 @@ from orchestrator.application.use_cases.signal_apply import (
 from orchestrator.application.use_cases.writers import Entry, record, require_run, set_run
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.errors import Conflict
+from orchestrator.domain.statuses import Actor
 from orchestrator.domain.values import Signal
 
 __all__ = [
@@ -92,8 +93,16 @@ START = "start"
 DEPENDENCY = "dependency"
 
 
-def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcome:
-    """Apply one Operator signal to a Run, or refuse it with the reason (409/422)."""
+def signal_run(
+    ports: SignalPorts,
+    run_id: UUID,
+    signal: Signal,
+    *,
+    actor: Actor | None = None,
+    text: str | None = None,
+) -> SignalOutcome:
+    """Apply one Operator signal to a Run, or refuse it with the reason (409/422); `actor`
+    and `text` name the sender and the record's words when it is not the table's."""
     if signal.kind == START:
         return _start_saved_run(ports, run_id, signal)
     # Dependency-park `continue` needs its own two-phase enqueue flow (story 5-4):
@@ -105,7 +114,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id, lock=True)
-        applied = apply_signal(ports, run, signal)
+        applied = apply_signal(ports, run, signal, actor=actor, text=text)
         writers.uow.commit()
     return finish_signal(ports, run_id, signal, applied)
 
@@ -171,7 +180,7 @@ def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -
     partition_key = (
         f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
     )
-    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key)
+    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key, lane=run.lane)
     with writers.uow:
         run = set_run(writers, run, engine_ref=engine_ref)
         writers.uow.commit()
@@ -218,7 +227,7 @@ def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> Signal
     partition_key = (
         f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
     )
-    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key)
+    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key, lane=run.lane)
     with writers.uow:
         run = set_run(writers, run, engine_ref=engine_ref)
         writers.uow.commit()

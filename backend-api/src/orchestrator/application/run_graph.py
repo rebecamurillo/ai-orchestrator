@@ -5,8 +5,9 @@ Split from `graph.py` for the module size limit; `graph` re-exports every name h
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from itertools import pairwise
+from uuid import UUID
 
 from orchestrator.application.graph_schema import (
     HUMAN_GATE,
@@ -16,7 +17,9 @@ from orchestrator.application.graph_schema import (
     Node,
 )
 from orchestrator.application.rules.frames import epic_frame, rows_in_frame, story_frame
-from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND
+from orchestrator.application.run_order import STEP_TOKENS, build_run_order
+from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND, CONVERSATION_KIND
+from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.statuses import CHK_PARK_KINDS, StepStatus
@@ -41,18 +44,6 @@ def _chain(ids: Sequence[str]) -> tuple[Edge, ...]:
 #: every shipped Template's step ids are plain identifiers with no brackets in them at the
 #: top level, so this can never collide with a real row.
 ROOT_ID = "root"
-
-#: Step tokens (Consistency Conventions — Status tokens), for a run graph's per-row nodes.
-STEP_TOKENS: dict[StepStatus, str] = {
-    "planned": "QUE",
-    "queued": "QUE",
-    "running": "RUN",
-    "done": "DON",
-    "blocked": "BLK",
-    "checkpoint": "CHK",
-    "error": "ERR",
-    "skipped": "SKP",
-}
 
 #: The three statuses that mean the whole Run — and so every group containing the row — is
 #: stopped for the Operator. Checked before `running`: the walker parks the Run the moment
@@ -114,18 +105,22 @@ def _run_node(run: Run) -> Node:
     )
 
 
-def _row_node(row: StepRun, *, current: bool) -> Node:
+def _row_node(row: StepRun, attempts: Sequence[Attempt], *, current: bool) -> Node:
     """One planned row, as one box: `step_run.path` verbatim, no index ever stripped."""
+    ns = tuple(sorted(attempt.n for attempt in attempts))
     return Node(
         id=row.path,
         kind=row.kind,
         label=row.label,
         gate=row.gate,
         agent=row.kind == AGENT_KIND,
-        human=row.gate == HUMAN_GATE or row.kind == CHECKPOINT_KIND,
+        human=row.gate == HUMAN_GATE or row.kind in (CHECKPOINT_KIND, CONVERSATION_KIND),
         status=row.status,
         token=STEP_TOKENS[row.status],
         current=current,
+        seq=row.seq,
+        attempt_n=max(ns, default=None),
+        attempt_ns=ns,
     )
 
 
@@ -166,16 +161,23 @@ def _group(prefix: str, rows: Sequence[StepRun], *, cancelled: bool) -> Group:
     )
 
 
-def build_run_graph(rows: Sequence[StepRun], run: Run) -> Graph:
+def build_run_graph(
+    rows: Sequence[StepRun],
+    run: Run,
+    attempts: Mapping[UUID, Sequence[Attempt]] | None = None,
+) -> Graph:
     """The graph of one Run: its planned rows, chained in `seq` order behind one root node
     standing for the Run itself, grouped by the epic/story frames they fall under."""
     ordered = sorted(rows, key=lambda row: row.seq)
     root = _run_node(run)
-    row_nodes = [_row_node(row, current=_is_current(row, run)) for row in ordered]
+    row_nodes = [
+        _row_node(row, (attempts or {}).get(row.id, ()), current=_is_current(row, run))
+        for row in ordered
+    ]
     nodes = (root, *row_nodes)
     edges = _chain((ROOT_ID, *(row.path for row in ordered)))
     groups = tuple(
         _group(prefix, ordered, cancelled=run.status == "cancelled")
         for prefix in _group_prefixes(ordered)
     )
-    return Graph(nodes=nodes, edges=edges, groups=groups)
+    return Graph(nodes=nodes, edges=edges, groups=groups, run_order=build_run_order(ordered))

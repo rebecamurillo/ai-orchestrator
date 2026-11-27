@@ -95,7 +95,9 @@ def test_finish_tells_the_engine_when_the_signal_resumed_the_run() -> None:
 
     assert outcome.resumed
     assert outcome.run == applied.run
-    assert world.engine.calls == [("signal", (world.run.id, signal))]
+    # story 2 (epic 4 conversation stop), 2026-11-22: the engine is
+    # handed the stop the signal was validated against
+    assert world.engine.calls == [("signal", (world.run.id, signal.model_copy(update={"stop": 3})))]
     assert world.engine.committed_when_called == [True]
 
 

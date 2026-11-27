@@ -28,6 +28,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -70,6 +71,11 @@ GATE_RECORD_AT_INDEX = "ix_gate_record_run_id_at"
 #: GIN, because the question is containment in an array and no b-tree answers that.
 RUN_AFTER_RUN_IDS_INDEX = "ix_run_after_run_ids"
 
+#: The idempotency of an initiative's advance (AD-36): one Run per initiative step.
+RUN_INITIATIVE_KEY_INDEX = "uq_run_initiative_key"
+#: Rendered `ck_run_initiative_keys_together` by the naming convention.
+RUN_INITIATIVE_KEYS_CHECK = "initiative_keys_together"
+
 #: Money, and the hours an Operator estimated by hand.
 MONEY = Numeric(12, 6)
 HOURS = Numeric(10, 2)
@@ -84,6 +90,20 @@ class RunRow(Base):
         Index(RUN_STATUS_INDEX, "status"),
         Index(RUN_REPOSITORY_STATUS_INDEX, "repository_id", "status"),
         Index(RUN_AFTER_RUN_IDS_INDEX, "after_run_ids", postgresql_using="gin"),
+        CheckConstraint(
+            "(initiative_id IS NULL AND initiative_round IS NULL AND initiative_position IS NULL)"
+            " OR (initiative_id IS NOT NULL AND initiative_round IS NOT NULL"
+            " AND initiative_position IS NOT NULL)",
+            name=RUN_INITIATIVE_KEYS_CHECK,
+        ),
+        Index(
+            RUN_INITIATIVE_KEY_INDEX,
+            "initiative_id",
+            "initiative_round",
+            "initiative_position",
+            unique=True,
+            postgresql_where=text("initiative_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
@@ -141,6 +161,7 @@ class RunRow(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     worktrees_removed: Mapped[bool] = mapped_column(Boolean())
     partition_branch: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    lane: Mapped[str] = mapped_column(Text(), nullable=False, server_default=text("'walk'"))
     #: The fan-in predecessor list (AD-12, spine amendment 2026-09-23). A real `uuid[]`
     #: rather than `jsonb`, unlike every other list on this table, because this one *is*
     #: queried into: `list_dependents` asks which Runs name a predecessor, and only an
@@ -150,6 +171,15 @@ class RunRow(Base):
     after_run_ids: Mapped[list[UUID]] = mapped_column(
         ARRAY(Uuid()), server_default=text("'{}'::uuid[]")
     )
+    #: Deferred: `create_initiative` adds the spec Run before its initiative, in one
+    #: transaction (`create_run`'s `before_commit`).
+    initiative_id: Mapped[UUID | None] = mapped_column(
+        Uuid(),
+        ForeignKey("initiative.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
+    )
+    initiative_round: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    initiative_position: Mapped[int | None] = mapped_column(Integer(), nullable=True)
 
 
 class StepRunRow(Base):
@@ -202,6 +232,7 @@ class AttemptRow(Base):
     root_end_sha: Mapped[str | None] = mapped_column(Text(), nullable=True)
     frozen_test_files: Mapped[list[str] | None] = mapped_column(JSONB(), nullable=True)
     log_path: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    log_removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     exit_code: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     output_ref: Mapped[str | None] = mapped_column(Text(), nullable=True)
     harness: Mapped[str | None] = mapped_column(Text(), nullable=True)
@@ -214,6 +245,9 @@ class AttemptRow(Base):
     cost_provisional: Mapped[bool] = mapped_column(Boolean())
     message: Mapped[str] = mapped_column(Text(), server_default="")
     reply: Mapped[str] = mapped_column(Text(), server_default="")
+    verdict_word: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    verdict_fields: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
+    verdict_text: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
 
 class GateRecordRow(Base):

@@ -25,9 +25,14 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from datetime import datetime
+from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
+#: The autonomy modes a Project's run defaults may name.
+AUTONOMY_MODES = ("auto", "checkpoints")
 
 #: The shell-exportable name of a Project variable.
 ENV_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -148,6 +153,12 @@ class ProjectView(BaseModel):
     #: construction predating this story — every frozen schema test among them — keeps
     #: reading unchanged.
     builtin: bool = False
+    #: The defaults the Project's build Run starts with; `None` until the Operator sets one.
+    default_budget_usd: Decimal | None = None
+    default_harness: str | None = None
+    default_model: str | None = None
+    default_autonomy: Literal["auto", "checkpoints"] | None = None
+    default_senior_model: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -171,6 +182,12 @@ class Project(BaseModel):
     #: be a bug). The default here is what every existing `Project(...)` construction site
     #: — every unit test among them — keeps reading as `False` unchanged.
     builtin: bool = False
+    #: The defaults the Project's build Run starts with; `None` until the Operator sets one.
+    default_budget_usd: Decimal | None = None
+    default_harness: str | None = None
+    default_model: str | None = None
+    default_autonomy: Literal["auto", "checkpoints"] | None = None
+    default_senior_model: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -193,6 +210,11 @@ class Project(BaseModel):
             ),
             log_prompt_content=self.log_prompt_content,
             builtin=self.builtin,
+            default_budget_usd=self.default_budget_usd,
+            default_harness=self.default_harness,
+            default_model=self.default_model,
+            default_autonomy=self.default_autonomy,
+            default_senior_model=self.default_senior_model,
             created_at=self.created_at,
             updated_at=self.updated_at,
         )

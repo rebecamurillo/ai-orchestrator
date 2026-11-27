@@ -63,6 +63,11 @@
   letter-spacing: var(--type-detail-title-tracking);
 }
 
+.wf-template-type {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
 .wf-age {
   color: var(--color-text-tertiary);
   font-size: var(--type-meta);
@@ -845,6 +850,80 @@ table.wf-steps tr[data-anchored='true'] td {
   white-space: nowrap;
 }
 
+/* Files by epic and story (epic 2 story 1). */
+.wf-files-group,
+.wf-files-story {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-files-story {
+  padding-left: var(--space-5);
+  color: var(--color-text-secondary);
+}
+
+.wf-files-folder,
+.wf-files-none {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.wf-files-none {
+  margin: 0;
+  padding: var(--space-2) var(--space-5);
+}
+
+.wf-files-file,
+.wf-files-changed,
+.wf-files-path {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-5);
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font-size: var(--type-row-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wf-files-changed {
+  color: var(--color-text-secondary);
+}
+
+.wf-files-path {
+  padding-left: var(--space-6);
+  font-family: var(--font-mono);
+}
+
+.wf-files-focus {
+  background: var(--color-surface-raised);
+}
+
+.wf-files-diff {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+  background: var(--color-surface-inset);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-meta);
+}
+
+.wf-files-diff-add {
+  color: var(--color-signal-run);
+}
+
+.wf-files-diff-del {
+  color: var(--color-signal-failed);
+}
+
 /* Text promotion for changed files (8-3): changed filename renders at full text weight. */
 .wf-artifacts-file[data-changed='true'] .wf-artifacts-name {
   color: var(--color-text);
@@ -1377,4 +1456,96 @@ div.wf-artifact-modal-body {
 .wf-session-anchors:focus-visible {
   outline: 1px solid var(--color-accent);
   outline-offset: 1px;
+}
+
+.wf-step-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 500px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-line-strong);
+  overflow: hidden;
+  z-index: 50;
+}
+
+.wf-step-drawer .step-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+  flex-shrink: 0;
+}
+
+.wf-step-drawer .step-drawer-close {
+  margin-left: auto;
+  font-size: var(--type-control);
+  text-transform: var(--type-control-transform);
+  letter-spacing: var(--type-control-tracking);
+  color: var(--color-text-tertiary);
+  padding: var(--space-2) var(--space-4);
+}
+
+.wf-step-drawer .step-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8);
+}
+
+.wf-step-drawer-title {
+  margin: 0;
+  font-size: inherit;
+}
+
+.wf-step-drawer-label {
+  font-size: var(--type-section-head);
+  text-transform: var(--type-section-head-transform);
+  letter-spacing: var(--type-section-head-tracking);
+  color: var(--color-text-tertiary);
+  margin: var(--space-8) 0 var(--space-4);
+}
+
+.wf-step-drawer-line {
+  margin: 0 0 var(--space-2);
+}
+
+.wf-step-drawer-order button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-4);
+  border-left: 2px solid transparent;
+}
+
+.wf-step-drawer-order .wf-step-drawer-row-current {
+  border-left-color: var(--color-accent);
+  background: var(--color-surface-raised);
+}
+
+table.wf-steps tr.wf-step-selected td {
+  background: var(--color-surface-raised);
+}
+
+table.wf-steps tr.wf-step-selected td:first-child {
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.wf-step-open {
+  color: var(--color-accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.wf-log-words {
+  margin: 0;
+  padding: var(--space-7) var(--space-6);
+  font-size: var(--type-row-body);
+  color: var(--color-text-tertiary);
 }

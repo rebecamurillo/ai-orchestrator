@@ -55,3 +55,5 @@ class TemplateVersionRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     #: `shipped`, `saved` or `folder`; `NULL` for a row written before AD-26.
     source: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    #: The package commit a `package` version was read at; `NULL` for every other source.
+    package_sha: Mapped[str | None] = mapped_column(Text(), nullable=True)
