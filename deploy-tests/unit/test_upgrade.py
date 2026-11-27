@@ -182,6 +182,7 @@ def _new_tweak(pins: dict[str, str]) -> Callable[[Path], None]:
     def tweak(tree: Path) -> None:
         with (tree / "install.sh").open("a") as fh:
             fh.write(f"\n# release {NEW}\n")
+        _set_pin(tree, "DBOS_APPLICATION_VERSION", "1")
         for name, value in pins.items():
             _set_pin(tree, name, value)
 
@@ -190,6 +191,9 @@ def _new_tweak(pins: dict[str, str]) -> Callable[[Path], None]:
 
 def _old_tweak(tree: Path) -> None:
     (tree / "old-only.txt").write_text("a file release 2 no longer ships\n")
+    # both releases start at the engine version `_activity` reports, not at the one the
+    # shipped release.env pins: that moved to 2 with PR #26 and moves again later
+    _set_pin(tree, "DBOS_APPLICATION_VERSION", "1")
 
 
 def _build(tmp_path: Path, pins: dict[str, str] | None = None) -> Folder:

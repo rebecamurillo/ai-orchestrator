@@ -3,6 +3,7 @@ import re
 import secrets
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -163,6 +164,18 @@ def _release(runner, release_n, stack_work, release_env):
     return harness.build_release_n1(
         runner, release_n, stack_work / f"build-{uuid.uuid4().hex[:8]}", release_env
     )
+
+
+def _next_engine_version():
+    # one above what the checkout ships, so the change holds whatever that is (PR #26 moved
+    # it from 1 to 2 and the literal "2" stopped being a change)
+    shipped = Path(__file__).resolve().parents[2] / "deploy" / "release.env"
+    pin = next(
+        line.split("=", 1)[1]
+        for line in shipped.read_text().splitlines()
+        if line.startswith("DBOS_APPLICATION_VERSION=")
+    )
+    return str(int(pin) + 1)
 
 
 def _tail(done):
@@ -359,7 +372,7 @@ def _compose_tag(folder):
 def test_an_engine_version_change_is_refused_while_runs_wait(
     runner, stack_work, release_n, _fresh_stack
 ):
-    _release(runner, release_n, stack_work, {"DBOS_APPLICATION_VERSION": "2"})
+    _release(runner, release_n, stack_work, {"DBOS_APPLICATION_VERSION": _next_engine_version()})
     stack = _fresh_stack(release_n, STACK_ENV)
     folder = stack.folder
     _install_step(stack, "--yes", "--no-pull")

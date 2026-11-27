@@ -582,7 +582,7 @@ def test_doctor_release_pins_warn_naming_both_values(folder: tuple[Path, dict[st
         line.startswith("warn")
         and "CODEX_VERSION" in line
         and "0.1.0" in line
-        and "0.167.0" in line
+        and parse_env_example(path / "release.env")["CODEX_VERSION"] in line
     )
 
 
