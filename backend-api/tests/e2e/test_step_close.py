@@ -154,11 +154,14 @@ def sessions(settings: Settings) -> Iterator[Any]:
 def in_stack(script: str, *arguments: str) -> subprocess.CompletedProcess[str] | None:
     """`script` run where the backend sees its worktrees: the container, else the host.
 
-    `None` when neither route answers; otherwise the first route's completed process.
+    `None` when neither route answers; otherwise the first route that succeeded, else the
+    last one's completed process. CI runs the backend on the runner, where `compose exec`
+    answers `service "backend-api" is not running` and the host is the route.
     """
+    done: subprocess.CompletedProcess[str] | None = None
     for prefix in (("docker", "compose", "exec", "-T", "backend-api"), ()):
         try:
-            return subprocess.run(  # fixed argv, no shell
+            done = subprocess.run(  # fixed argv, no shell
                 [*prefix, "sh", "-c", script, "sh", *arguments],
                 cwd=REPO_ROOT,
                 capture_output=True,
@@ -168,7 +171,9 @@ def in_stack(script: str, *arguments: str) -> subprocess.CompletedProcess[str] |
             )
         except OSError, subprocess.TimeoutExpired:
             continue
-    return None
+        if done.returncode == 0:
+            return done
+    return done
 
 
 def worktree_of(sessions: Any, run_id: str) -> str:
