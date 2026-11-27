@@ -242,9 +242,9 @@ class Settings(BaseSettings):
 
     # ── Pinned tool versions carried by the image (AD-16) ────────────────────
     bmad_version: str = "6.12.4"
-    claude_code_version: str = "2.1.319"
-    codex_version: str = "0.167.0"
-    opencode_version: str = "1.19.5"
+    claude_code_version: str = "2.1.332"
+    codex_version: str = "0.172.0"
+    opencode_version: str = "1.19.6"
     langfuse_opencode_plugin_version: str = "0.7.0"
 
     # ── Harness environment ──────────────────────────────────────────────────

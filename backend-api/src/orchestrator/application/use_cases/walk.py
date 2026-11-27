@@ -291,8 +291,9 @@ def current_stop(ports: WalkPorts, run_id: UUID) -> int:
 
 
 def open_turns(ports: WalkPorts, run_id: UUID) -> int:
-    """How many session turns of the Run are still running: a killed one closes only when its
-    own workflow has swept its trees, and the walk must not touch them before then."""
+    """How many session turns of the Run are still open: a killed one closes only when its
+    own workflow has swept its trees, and the walk must not touch them before then. Its exit
+    is recorded (`error`) before that sweep, so only `ended_at` says it is over."""
     writers = ports.writers
     with writers.uow:
         return sum(
@@ -300,7 +301,7 @@ def open_turns(ports: WalkPorts, run_id: UUID) -> int:
             for row in writers.steps.list_for_run(run_id)
             for attempt in writers.attempts.list_for_row(row.id)
             if attempt.role == session.SESSION_ROLE
-            and attempt.status == "running"
+            and attempt.status != "queued"
             and attempt.ended_at is None
         )
 

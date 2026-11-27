@@ -52,7 +52,7 @@ different version than the one it starts.
 
 ```bash
 docker login ghcr.io -u <your-github-user>        # the token is the password
-docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta.5 kit bootstrap | tar x
+docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta.6 kit bootstrap | tar x
 cd ai-orchestrator
 ./install.sh
 ```
@@ -124,7 +124,7 @@ For developing the orchestrator itself, or for building the images on this machi
 ```bash
 ./install.sh doctor                     # one ok / warn / fail line per check; every fail ends with its fix
 ./install.sh status                     # docker compose ps for this stack
-curl -fs http://127.0.0.1:8000/healthz  # {"status":"ok","version":"1.0.0-beta.5"}
+curl -fs http://127.0.0.1:8000/healthz  # {"status":"ok","version":"1.0.0-beta.6"}
 ```
 
 `doctor` changes nothing and prints no secret, so its output is safe to paste into a bug
@@ -435,7 +435,7 @@ From the deploy folder:
 ./install.sh start --with-docker # add a Docker daemon for Runs whose commands run `docker compose` (privileged sidecar — read guide host/docker-for-runs first)
 ./install.sh setup               # re-run setup/*.sh and the BMAD install now
 ./install.sh bmad remove|install # take the BMAD skills out of the harness home, or put them back
-./install.sh harness claude --version 2.1.319   # apply a harness CLI pin and recreate backend-api
+./install.sh harness claude --version 2.1.332   # apply a harness CLI pin and recreate backend-api
 ./install.sh upgrade --tag <newer>
 ./install.sh uninstall           # stop and DELETE the volumes, after typing `delete`; keeps .env
 ```
