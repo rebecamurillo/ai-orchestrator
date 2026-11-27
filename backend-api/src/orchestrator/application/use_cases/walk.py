@@ -261,7 +261,8 @@ def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:
     """End a Run that has nothing queued: `done` when every row finished, parked when not."""
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        # locked, as `signal_run` locks it: a cancel committed meanwhile is read, not overwritten
+        run = require_run(writers, run_id, lock=True)
         if run.status != RUNNING:
             log.info(LATE_CLOSE, run_id=str(run_id), status=run.status)
             return run.status
@@ -308,7 +309,7 @@ def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:
     """The 30-day `recv` reached its deadline: the Run fails, unless a signal beat it."""
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        run = require_run(writers, run_id, lock=True)
         if run.status != NEEDS_YOU:
             log.info(NOT_PARKED, run_id=str(run_id), status=run.status)
             return run.status
