@@ -190,7 +190,7 @@ images (`read:packages`) and clone your repositories (`repo`), 8 GB of RAM.
 
 ```bash
 docker login ghcr.io -u <your-github-user>        # the token is the password
-docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta.5 kit bootstrap | tar x
+docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta.6 kit bootstrap | tar x
 cd ai-orchestrator && ./install.sh
 ```
 
